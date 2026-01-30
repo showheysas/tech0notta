@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api", tags=["summarize"])
 
 class SummarizeRequest(BaseModel):
     job_id: str
+    template_prompt: str | None = None
 
 
 @router.post("/summarize")
@@ -38,7 +39,10 @@ async def summarize_transcription(
         job.status = JobStatus.SUMMARIZING.value
         db.commit()
 
-        summary = get_azure_openai_service().generate_summary(job.transcription)
+        summary = get_azure_openai_service().generate_summary(
+            job.transcription,
+            template_prompt=request.template_prompt
+        )
 
         job.summary = summary
         job.status = JobStatus.SUMMARIZED.value

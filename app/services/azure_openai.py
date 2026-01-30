@@ -14,7 +14,7 @@ class AzureOpenAIService:
         )
         self.deployment_name = settings.AZURE_OPENAI_DEPLOYMENT_NAME
 
-    def generate_summary(self, transcription: str) -> str:
+    def generate_summary(self, transcription: str, template_prompt: str | None = None) -> str:
         try:
             system_prompt = """あなたは議事録を要約する専門家です。
 以下の議事録を、次の形式で要約してください:
@@ -39,10 +39,11 @@ class AzureOpenAIService:
 
 簡潔で分かりやすい日本語でまとめてください。"""
 
+            prompt = template_prompt.strip() if template_prompt else system_prompt
             response = self.client.chat.completions.create(
                 model=self.deployment_name,
                 messages=[
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": prompt},
                     {"role": "user", "content": f"以下の議事録を要約してください:\n\n{transcription}"}
                 ],
                 temperature=0.3,
