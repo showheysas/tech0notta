@@ -29,6 +29,7 @@ class Job(Base):
     blob_url = Column(String(512), nullable=True)
     status = Column(String(50), default=JobStatus.PENDING.value, nullable=False)
     transcription = Column(Text, nullable=True)
+    transcription_job_id = Column(String(128), nullable=True)
     summary = Column(Text, nullable=True)
     notion_page_id = Column(String(255), nullable=True)
     notion_page_url = Column(String(512), nullable=True)

@@ -34,6 +34,23 @@ class AzureSpeechBatchService:
         )
         return self._fetch_transcription_text(transcription_id)
 
+    def submit_transcription(self, blob_sas_url: str, locale: str = "ja-JP") -> str:
+        return self._create_transcription(blob_sas_url, locale)
+
+    def get_transcription_status(self, transcription_id: str) -> dict:
+        response = httpx.get(
+            f"{self.endpoint}/speechtotext/transcriptions/{transcription_id}",
+            headers=self.headers,
+            params={"api-version": self.api_version},
+            timeout=60,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return {"status": data.get("status"), "error": data.get("error")}
+
+    def fetch_transcription_text(self, transcription_id: str) -> str:
+        return self._fetch_transcription_text(transcription_id)
+
     def _create_transcription(self, blob_sas_url: str, locale: str) -> str:
         url = f"{self.endpoint}/speechtotext/transcriptions:submit"
         payload = {

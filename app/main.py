@@ -47,6 +47,7 @@ async def root():
         "endpoints": {
             "upload": "POST /api/upload",
             "transcribe": "POST /api/transcribe",
+            "transcribe_status": "GET /api/transcribe/status?job_id=...",
             "summarize": "POST /api/summarize",
             "notion_create": "POST /api/notion/create",
             "job_status": "GET /api/jobs/{job_id}"
