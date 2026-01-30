@@ -1,102 +1,119 @@
-# Meeting Notes Backend API
+# Tech0 Notta MVP Backend API
 
-FastAPIを使った議事録アプリケーションのバックエンドAPI
+FastAPI で音声ファイルのアップロード、文字起こし、要約、Notion 連携を行うバックエンドです。  
 
-## 機能
+## デプロイ
 
-- 音声ファイルのアップロード (Azure Blob Storage)
-- 音声の文字起こし (Azure AI Speech Service)
-- GPT-4oによる要約生成 (Azure OpenAI)
-- Notionへの議事録保存 (Notion API)
-- ジョブ管理 (PostgreSQL)
+- デプロイ先: Azure App Service (Linux)
+- GitHub Actions で継続デプロイ
+- Startup Command: `bash startup.sh`
 
-## セットアップ
+## 必要な環境変数（App Service > 構成）
 
-### 1. 環境変数の設定
+必須:
+- AZURE_STORAGE_CONNECTION_STRING
+- AZURE_STORAGE_CONTAINER_NAME
+- AZURE_SPEECH_KEY
+- AZURE_SPEECH_REGION
+- AZURE_SPEECH_API_VERSION
+- AZURE_OPENAI_API_KEY
+- AZURE_OPENAI_ENDPOINT
+- AZURE_OPENAI_DEPLOYMENT_NAME
+- AZURE_OPENAI_API_VERSION
+- CORS_ORIGINS
 
-`.env.example`をコピーして`.env`を作成し、必要な情報を入力してください。
+任意:
+- AZURE_SPEECH_ENDPOINT
+- NOTION_API_KEY
+- NOTION_DATABASE_ID
+- MAX_FILE_SIZE_MB
+- DATABASE_URL
 
-```bash
-cp .env.example .env
-```
-
-### 2. 依存パッケージのインストール
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. データベースのセットアップ
-
-PostgreSQLが起動していることを確認してください。
-
-### 4. サーバーの起動
-
-```bash
-uvicorn app.main:app --reload
-```
-
-サーバーは `http://localhost:8000` で起動します。
-
-## API エンドポイント
+## API
 
 ### POST /api/upload
-音声ファイルをアップロード
+音声ファイルをアップロードします。
 
-```bash
-curl -X POST "http://localhost:8000/api/upload" \
-  -F "file=@meeting.wav"
-```
+- 入力（multipart/form-data）
+  - file: 音声ファイル（mp3 / wav など）
+- 出力（JSON）
+  - job_id: string
+  - status: string
+  - filename: string
+  - blob_name: string
+  - blob_url: string
+  - message: string
 
-### POST /api/transcribe
-音声を文字起こし
+### POST /api/transcribe（非同期）
+文字起こしジョブを開始します。すぐに `job_id` が返ります。
 
-```bash
-curl -X POST "http://localhost:8000/api/transcribe" \
-  -H "Content-Type: application/json" \
-  -d '{"job_id": "your-job-id"}'
-```
+- 入力（JSON）
+  - job_id: string
+- 出力（JSON）
+  - job_id: string
+  - status: "transcribing"
+  - transcription_job_id: string
+  - message: string
+
+### GET /api/transcribe/status
+文字起こしの進行状況・結果を取得します。
+
+- 入力（query）
+  - job_id: string
+- 出力（JSON）
+  - 進行中: {"job_id","status","batch_status"}
+  - 成功: {"job_id","status","transcription"}
+  - 失敗: {"job_id","status","error_message"}
 
 ### POST /api/summarize
-文字起こしを要約
+要約を生成します。`template_prompt` を渡すと議事録テンプレートを指定できます。
 
-```bash
-curl -X POST "http://localhost:8000/api/summarize" \
-  -H "Content-Type: application/json" \
-  -d '{"job_id": "your-job-id"}'
-```
+- 入力（JSON）
+  - job_id: string
+  - template_prompt: string | null
+- 出力（JSON）
+  - job_id: string
+  - status: "summarized"
+  - summary: string
+  - message: string
 
 ### POST /api/notion/create
-Notionページを作成
+Notion に議事録ページを作成します。
 
-```bash
-curl -X POST "http://localhost:8000/api/notion/create" \
-  -H "Content-Type: application/json" \
-  -d '{"job_id": "your-job-id", "title": "会議タイトル"}'
-```
+- 入力（JSON）
+  - job_id: string
+  - title: string
+- 出力（JSON）
+  - job_id: string
+  - status: string
+  - notion_page_id: string
+  - notion_page_url: string
+  - message: string
 
 ### GET /api/jobs/{job_id}
-ジョブのステータス確認
+ジョブの状態を確認します。
 
-```bash
-curl "http://localhost:8000/api/jobs/{job_id}"
+- 入力（path）
+  - job_id: string
+- 出力（JSON）
+  - job_id: string
+  - status: string
+  - transcription: string | null
+  - summary: string | null
+  - notion_page_id: string | null
+  - notion_page_url: string | null
+  - error_message: string | null
+
+## 502 対策（長時間処理）
+
+Batch 文字起こしは時間がかかるため、非同期 API を使用してください。  
+必要に応じて App Service のアプリ設定に以下を追加します。
+
+```
+GUNICORN_CMD_ARGS=--timeout 900 --workers 1 --graceful-timeout 30
 ```
 
-## Docker
-
-### ビルド
-
-```bash
-docker build -t meeting-notes-api .
-```
-
-### 実行
-
-```bash
-docker run -p 8000:8000 --env-file .env meeting-notes-api
-```
-
-## プロジェクト構造
+## プロジェクト構成
 
 ```
 backend/
@@ -120,20 +137,3 @@ backend/
 ├── .env.example
 └── Dockerfile
 ```
-
-## ジョブステータス
-
-- `pending`: 初期状態
-- `uploading`: アップロード中
-- `uploaded`: アップロード完了
-- `transcribing`: 文字起こし中
-- `transcribed`: 文字起こし完了
-- `summarizing`: 要約生成中
-- `summarized`: 要約完了
-- `creating_notion`: Notion作成中
-- `completed`: 完了
-- `failed`: エラー
-
-## ライセンス
-
-MIT
