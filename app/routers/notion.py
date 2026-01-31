@@ -27,10 +27,10 @@ async def create_notion_page(
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
-        if job.status != JobStatus.SUMMARIZED.value:
+        if job.status not in [JobStatus.SUMMARIZED.value, JobStatus.FAILED.value]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Job is not in SUMMARIZED status. Current status: {job.status}"
+                detail=f"Job is not in SUMMARIZED or FAILED status. Current status: {job.status}"
             )
 
         if not job.transcription or not job.summary:
@@ -73,7 +73,7 @@ async def create_notion_page(
             job.status = JobStatus.FAILED.value
             job.error_message = str(e)
             db.commit()
-        raise HTTPException(status_code=500, detail="Failed to create Notion page")
+        raise HTTPException(status_code=500, detail=f"Failed to create Notion page: {str(e)}")
 
 
 @router.get("/jobs/{job_id}")

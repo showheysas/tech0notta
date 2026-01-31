@@ -13,24 +13,36 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./meeting_notes.db"
 
     # Azure Blob Storage
-    AZURE_STORAGE_CONNECTION_STRING: str
+    AZURE_STORAGE_CONNECTION_STRING: str | None = None
     AZURE_STORAGE_CONTAINER_NAME: str = "audio-files"
 
     # Azure Speech Service
-    AZURE_SPEECH_KEY: str
+    AZURE_SPEECH_KEY: str | None = None
     AZURE_SPEECH_REGION: str = "japaneast"
     AZURE_SPEECH_API_VERSION: str = "2025-10-15"
     AZURE_SPEECH_ENDPOINT: str = ""
 
     # Azure OpenAI
-    AZURE_OPENAI_API_KEY: str
-    AZURE_OPENAI_ENDPOINT: str
+    AZURE_OPENAI_API_KEY: str | None = None
+    AZURE_OPENAI_ENDPOINT: str | None = None
     AZURE_OPENAI_DEPLOYMENT_NAME: str = "gpt-4o"
     AZURE_OPENAI_API_VERSION: str = "2024-08-01-preview"
 
     # Notion (optional)
     NOTION_API_KEY: str = ""
     NOTION_DATABASE_ID: str = ""
+
+    # Zoom Webhook
+    ZOOM_WEBHOOK_SECRET_TOKEN: str | None = None
+
+    # Zoom Server-to-Server OAuth
+    ZOOM_ACCOUNT_ID: str | None = None
+    ZOOM_CLIENT_ID: str | None = None
+    ZOOM_CLIENT_SECRET: str | None = None
+
+    # Zoom Meeting SDK
+    ZOOM_SDK_KEY: str | None = None
+    ZOOM_SDK_SECRET: str | None = None
 
     # Application
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"

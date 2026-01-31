@@ -44,3 +44,9 @@ def _ensure_jobs_columns():
     if "transcription_job_id" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE jobs ADD COLUMN transcription_job_id VARCHAR(128)"))
+    if "duration" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN duration INTEGER"))
+    if "last_viewed_at" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN last_viewed_at DATETIME"))

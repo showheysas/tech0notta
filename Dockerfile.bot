@@ -1,0 +1,137 @@
+FROM --platform=linux/arm64 ubuntu:22.04
+
+# 環境変数の設定
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LD_LIBRARY_PATH=/app/sdk
+
+# 必要なパッケージのインストール
+RUN apt-get update && apt-get install -y \
+    # ビルドツール
+    build-essential \
+    cmake \
+    g++ \
+    libcurl4-openssl-dev \
+    # デバッグ・開発ツール
+    curl \
+    git \
+    gdb \
+    # GUI/グラフィックス関連（Zoom SDKが必要とする）
+    libglib2.0-0 \
+    libgstreamer-plugins-base1.0-0 \
+    libxcb-keysyms1 \
+    libxcb-shm0 \
+    libxcb-xfixes0 \
+    libxcb-shape0 \
+    libxcb-randr0 \
+    libxcb-image0 \
+    libfontconfig1 \
+    libxi6 \
+    libsm6 \
+    libxrender1 \
+    libxkbcommon0 \
+    libxkbcommon-x11-0 \
+    # オーディオ関連
+    libpulse0 \
+    libasound2 \
+    libasound2-plugins \
+    pulseaudio \
+    pulseaudio-utils \
+    # その他
+    ca-certificates \
+    pkg-config \
+    libdbus-1-3 \
+    libgbm1 \
+    # Python（エントリーポイントスクリプト用）
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# 追加の依存パッケージ（リンクエラー解消用）
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-dev \
+    libxfixes-dev \
+    libxcb-xtest0-dev \
+    libx11-dev \
+    libxcb1-dev \
+    libgbm-dev \
+    xvfb \
+    qtbase5-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LD_LIBRARY_PATH=/app/sdk:/app/sdk/qt_libs/Qt/lib:$LD_LIBRARY_PATH
+
+# 作業ディレクトリの設定
+WORKDIR /app
+
+# ----- SDKのコピー (ARM64版) -----
+COPY zoom-meeting-sdk-linux_arm64-6.7.2.7022 /app/sdk
+RUN ln -s /app/sdk/libmeetingsdk.so /app/sdk/libmeetingsdk.so.1
+
+# ----- C++ Bot ビルド -----
+COPY app/zoom_bot /app/zoom_bot_src
+
+# CMakeビルド
+RUN mkdir -p /app/zoom_bot_src/build && \
+    cd /app/zoom_bot_src/build && \
+    cmake -DZOOM_SDK_DIR=/app/sdk .. && \
+    make -j$(nproc) && \
+    cp ZoomMeetingBot /app/zoom_bot
+
+# ----- Pythonラッパー -----
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+COPY app /app/app
+
+# PulseAudio設定スクリプト
+COPY app/bot_runner/setup-pulseaudio.sh /app/setup-pulseaudio.sh
+RUN chmod +x /app/setup-pulseaudio.sh
+
+# 音声キャプチャスクリプト
+COPY app/bot_runner/audio_capture.sh /app/audio_capture.sh
+RUN chmod +x /app/audio_capture.sh
+
+# アップロード・ワークフロースクリプト
+COPY app/bot_runner/upload_workflow.py /app/upload_workflow.py
+
+# リアルタイム文字起こしスクリプト
+COPY app/bot_runner/realtime_transcriber.py /app/realtime_transcriber.py
+
+# Pythonエントリーポイント
+COPY app/bot_runner/entrypoint.py /app/entrypoint.py
+
+# config_generator.py (entrypoint.pyからインポートされる)
+COPY app/bot_runner/config_generator.py /app/config_generator.py
+
+# 録音保存ディレクトリ
+RUN mkdir -p /app/recordings
+
+# ----- エントリーポイント -----
+COPY <<'EOF' /app/entrypoint.sh
+#!/bin/bash
+set -e
+
+echo "=========================================="
+echo "  🤖 Tech Notta - Zoom Meeting Bot"
+echo "  📝 Real-time + Broadcast Mode"
+echo "=========================================="
+
+# Xvfb起動
+echo "[Entrypoint] Xvfb起動中..."
+Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+export DISPLAY=:99
+sleep 1
+
+# メインのPythonスクリプトを実行
+# (PulseAudio設定、音声キャプチャ、リアルタイム文字起こし、Bot実行、アップロードワークフロー全てを管理)
+echo "[Entrypoint] Pythonエントリーポイントを実行..."
+exec python3 /app/entrypoint.py "$@"
+EOF
+
+RUN chmod +x /app/entrypoint.sh
+
+# 録音ファイル保存用ボリューム
+VOLUME ["/app/recordings"]
+
+ENTRYPOINT ["/app/entrypoint.sh"]
+

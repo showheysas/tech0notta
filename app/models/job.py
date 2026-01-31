@@ -36,6 +36,8 @@ class Job(Base):
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    duration = Column(Integer, nullable=True)  # 秒単位
+    last_viewed_at = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self):
         return f"<Job(job_id={self.job_id}, status={self.status})>"

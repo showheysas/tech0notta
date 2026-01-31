@@ -90,7 +90,7 @@ class NotionService:
             response = self.client.pages.create(
                 parent={"database_id": self.database_id},
                 properties={
-                    "Name": {
+                    "名前": {
                         "title": [
                             {
                                 "text": {
@@ -99,20 +99,20 @@ class NotionService:
                             }
                         ]
                     },
-                    "日付": {
-                        "date": {
-                            "start": datetime.now().isoformat()
-                        }
-                    },
-                    "音声ファイル": {
-                        "rich_text": [
-                            {
-                                "text": {
-                                    "content": audio_filename
-                                }
-                            }
-                        ]
-                    }
+                    # "日付": {
+                    #     "date": {
+                    #         "start": datetime.now().isoformat()
+                    #     }
+                    # },
+                    # "音声ファイル": {
+                    #     "rich_text": [
+                    #         {
+                    #             "text": {
+                    #                 "content": audio_filename
+                    #             }
+                    #         }
+                    #     ]
+                    # }
                 },
                 children=children
             )

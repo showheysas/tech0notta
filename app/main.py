@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db
 from app.routers import upload, transcribe, summarize, notion
+from app.routers import zoom_webhook, bot_router, sync_router, jobs, live_router, rtms_router
 import logging
 
 logging.basicConfig(
@@ -26,10 +27,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 注意: jobs.router は /api/jobs/stats パスを持つため、
+# notion.router の /api/jobs/{job_id} より先に登録する必要がある
+app.include_router(jobs.router)
 app.include_router(upload.router)
 app.include_router(transcribe.router)
 app.include_router(summarize.router)
 app.include_router(notion.router)
+app.include_router(zoom_webhook.router)
+app.include_router(bot_router.router)
+app.include_router(sync_router.router)
+app.include_router(live_router.router)
+app.include_router(rtms_router.router)
 
 
 @app.on_event("startup")
