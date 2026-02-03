@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     NOTION_API_KEY: str = ""
     NOTION_DATABASE_ID: str = ""
 
+    # Slack
+    SLACK_BOT_TOKEN: str | None = None
+    SLACK_CHANNEL_ID: str | None = None
+    SLACK_SIGNING_SECRET: str | None = None  # Slackからのリクエスト検証用（将来の拡張用）
+
     # Zoom Webhook
     ZOOM_WEBHOOK_SECRET_TOKEN: str | None = None
 

@@ -1,5 +1,6 @@
 from openai import AzureOpenAI
 from app.config import settings
+from typing import List, Generator
 import logging
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,58 @@ class AzureOpenAIService:
         except Exception as e:
             logger.error(f"Error generating summary: {e}")
             raise
+    
+    def chat_rewrite(
+        self, 
+        messages: List[dict], 
+        streaming: bool = False
+    ):
+        """
+        対話型リライト機能
+        
+        Args:
+            messages: 対話履歴を含むメッセージリスト
+            streaming: ストリーミングレスポンスを使用するか
+        
+        Returns:
+            修正された議事録（ストリーミングの場合はジェネレーター）
+        """
+        try:
+            if streaming:
+                return self._chat_rewrite_streaming(messages)
+            else:
+                return self._chat_rewrite_normal(messages)
+        
+        except Exception as e:
+            logger.error(f"Error in chat rewrite: {e}")
+            raise
+    
+    def _chat_rewrite_normal(self, messages: List[dict]) -> str:
+        """非ストリーミングのチャットリライト"""
+        response = self.client.chat.completions.create(
+            model=self.deployment_name,
+            messages=messages,
+            temperature=0.3,
+            max_tokens=3000
+        )
+        
+        content = response.choices[0].message.content
+        logger.info(f"Chat rewrite completed: {len(content)} characters")
+        return content
+    
+    def _chat_rewrite_streaming(self, messages: List[dict]) -> Generator[str, None, None]:
+        """ストリーミングのチャットリライト"""
+        response = self.client.chat.completions.create(
+            model=self.deployment_name,
+            messages=messages,
+            temperature=0.3,
+            max_tokens=3000,
+            stream=True
+        )
+        
+        for chunk in response:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
 
 _azure_openai_service = None

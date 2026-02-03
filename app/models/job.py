@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, Integer, DateTime, Text, Enum as SQLEnum
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
 from enum import Enum
@@ -38,6 +39,9 @@ class Job(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     duration = Column(Integer, nullable=True)  # 秒単位
     last_viewed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # リレーション
+    chat_sessions = relationship("ChatSession", back_populates="job")
 
     def __repr__(self):
         return f"<Job(job_id={self.job_id}, status={self.status})>"

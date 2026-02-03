@@ -19,6 +19,9 @@ openai==1.55.3
 # Notion
 notion-client==2.2.1
 
+# Slack
+slack-sdk==3.27.0
+
 # Utils
 httpx==0.27.2
 

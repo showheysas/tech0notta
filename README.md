@@ -1,6 +1,6 @@
 # Tech0 Notta MVP Backend API
 
-FastAPI で音声ファイルのアップロード、文字起こし、要約、Notion 連携を行うバックエンドです。  
+FastAPI で音声ファイルのアップロード、文字起こし、要約、Notion 連携、対話型リライト、Slack 通知を行うバックエンドです。  
 
 ## デプロイ
 
@@ -26,6 +26,9 @@ FastAPI で音声ファイルのアップロード、文字起こし、要約、
 - AZURE_SPEECH_ENDPOINT
 - NOTION_API_KEY
 - NOTION_DATABASE_ID
+- SLACK_BOT_TOKEN
+- SLACK_CHANNEL_ID
+- SLACK_SIGNING_SECRET
 - MAX_FILE_SIZE_MB
 - DATABASE_URL
 
@@ -104,6 +107,56 @@ Notion に議事録ページを作成します。
   - notion_page_url: string | null
   - error_message: string | null
 
+### POST /api/chat/sessions
+チャットセッションを作成します。
+
+- 入力（JSON）
+  - job_id: string
+- 出力（JSON）
+  - session_id: string
+  - job_id: string
+  - created_at: string
+  - updated_at: string | null
+
+### POST /api/chat/sessions/{session_id}/messages
+チャットメッセージを送信して議事録をリライトします。
+
+- 入力（JSON）
+  - message: string
+  - streaming: boolean
+- 出力（JSON / ストリーミング）
+  - 非ストリーミング: {"message_id","role","content","created_at"}
+  - ストリーミング: Server-Sent Events 形式
+
+### GET /api/chat/sessions/{session_id}/messages
+チャット履歴を取得します。
+
+- 入力（path）
+  - session_id: string
+- 出力（JSON）
+  - session_id: string
+  - job_id: string
+  - messages: array
+
+### GET /api/chat/sessions
+セッション一覧を取得します。
+
+- 入力（query）
+  - job_id: string | null
+- 出力（JSON）
+  - sessions: array
+
+### POST /api/approve
+議事録を承認して Slack に通知します。
+
+- 入力（JSON）
+  - job_id: string
+- 出力（JSON）
+  - job_id: string
+  - status: "completed"
+  - message: string
+  - slack_posted: boolean
+
 ## 502 対策（長時間処理）
 
 Batch 文字起こしは時間がかかるため、非同期 API を使用してください。  
@@ -122,17 +175,24 @@ backend/
 │   ├── config.py            # 環境変数
 │   ├── database.py          # DB接続
 │   ├── models/
-│   │   └── job.py           # Jobモデル
+│   │   ├── job.py           # Jobモデル
+│   │   └── chat.py          # Chatモデル
 │   ├── routers/
 │   │   ├── upload.py        # アップロード
 │   │   ├── transcribe.py    # 文字起こし
 │   │   ├── summarize.py     # 要約
-│   │   └── notion.py        # Notion連携
-│   └── services/
-│       ├── azure_speech.py
-│       ├── azure_openai.py
-│       ├── blob_storage.py
-│       └── notion_client.py
+│   │   ├── notion.py        # Notion連携
+│   │   ├── chat.py          # チャット機能
+│   │   └── approval.py      # 承認・Slack通知
+│   ├── services/
+│   │   ├── azure_speech.py
+│   │   ├── azure_openai.py
+│   │   ├── blob_storage.py
+│   │   ├── notion_client.py
+│   │   ├── chat_service.py  # チャットサービス
+│   │   └── slack_service.py # Slack通知
+│   └── schemas/
+│       └── chat.py          # Chatスキーマ
 ├── requirements.txt
 ├── .env.example
 └── Dockerfile

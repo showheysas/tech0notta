@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db
-from app.routers import upload, transcribe, summarize, notion
+from app.routers import upload, transcribe, summarize, notion, chat, approval
 from app.routers import zoom_webhook, bot_router, sync_router, jobs, live_router, rtms_router
 import logging
 
@@ -34,6 +34,8 @@ app.include_router(upload.router)
 app.include_router(transcribe.router)
 app.include_router(summarize.router)
 app.include_router(notion.router)
+app.include_router(chat.router)
+app.include_router(approval.router)
 app.include_router(zoom_webhook.router)
 app.include_router(bot_router.router)
 app.include_router(sync_router.router)
@@ -59,7 +61,12 @@ async def root():
             "transcribe_status": "GET /api/transcribe/status?job_id=...",
             "summarize": "POST /api/summarize",
             "notion_create": "POST /api/notion/create",
-            "job_status": "GET /api/jobs/{job_id}"
+            "job_status": "GET /api/jobs/{job_id}",
+            "chat_session_create": "POST /api/chat/sessions",
+            "chat_message_send": "POST /api/chat/sessions/{session_id}/messages",
+            "chat_history": "GET /api/chat/sessions/{session_id}/messages",
+            "chat_sessions_list": "GET /api/chat/sessions",
+            "approve": "POST /api/approve"
         }
     }
 

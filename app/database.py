@@ -34,6 +34,7 @@ def get_db():
 def init_db():
     Base.metadata.create_all(bind=engine)
     _ensure_jobs_columns()
+    _ensure_chat_tables()
 
 
 def _ensure_jobs_columns():
@@ -50,3 +51,13 @@ def _ensure_jobs_columns():
     if "last_viewed_at" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE jobs ADD COLUMN last_viewed_at DATETIME"))
+
+
+def _ensure_chat_tables():
+    """チャット関連のテーブルが存在することを確認"""
+    inspector = inspect(engine)
+    table_names = inspector.get_table_names()
+    
+    # chat_sessionsテーブルが存在しない場合は作成
+    if "chat_sessions" not in table_names or "chat_messages" not in table_names:
+        Base.metadata.create_all(bind=engine)
