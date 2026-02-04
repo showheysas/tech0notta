@@ -14,6 +14,8 @@ router = APIRouter(prefix="/api", tags=["approval"])
 class ApprovalRequest(BaseModel):
     """承認リクエスト"""
     job_id: str
+    approved_by: str
+    comment: str = ""
 
 
 class ApprovalResponse(BaseModel):
@@ -61,7 +63,11 @@ async def approve_minutes(
         # Slackに通知
         slack_service = get_slack_service()
         try:
-            slack_response = slack_service.post_approved_minutes(job)
+            slack_response = slack_service.post_approved_minutes(
+                job,
+                approved_by=request.approved_by,
+                comment=request.comment
+            )
             slack_posted = slack_response.get("ok", False)
         except Exception as e:
             logger.error(f"Slack notification failed: {e}")

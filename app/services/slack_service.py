@@ -17,12 +17,14 @@ class SlackService:
             self.client = None
             logger.warning("SLACK_BOT_TOKEN not configured")
     
-    def post_approved_minutes(self, job: Job) -> dict:
+    def post_approved_minutes(self, job: Job, approved_by: str = "", comment: str = "") -> dict:
         """
         承認された議事録をSlackに投稿
         
         Args:
             job: Jobモデル
+            approved_by: 承認者名
+            comment: コメント（任意）
             
         Returns:
             Slack APIの応答
@@ -31,7 +33,7 @@ class SlackService:
             logger.warning("Slack not configured, skipping notification")
             return {"ok": False, "error": "not_configured"}
         
-        blocks = self._build_approved_minutes_blocks(job)
+        blocks = self._build_approved_minutes_blocks(job, approved_by, comment)
         
         try:
             response = self.client.chat_postMessage(
@@ -45,12 +47,14 @@ class SlackService:
             logger.error(f"Slack API error: {e.response['error']}")
             raise
     
-    def _build_approved_minutes_blocks(self, job: Job) -> list:
+    def _build_approved_minutes_blocks(self, job: Job, approved_by: str = "", comment: str = "") -> list:
         """
         承認済み議事録のSlackブロックを生成
         
         Args:
             job: Jobモデル
+            approved_by: 承認者名
+            comment: コメント（任意）
             
         Returns:
             Slackブロックのリスト
@@ -75,11 +79,38 @@ class SlackService:
                         "text": f"*作成日時:*\n{job.created_at.strftime('%Y-%m-%d %H:%M')}"
                     }
                 ]
-            },
-            {
-                "type": "divider"
             }
         ]
+        
+        # 承認者情報を追加
+        if approved_by:
+            blocks.append({
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*承認者:*\n{approved_by}"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*承認日時:*\n{job.updated_at.strftime('%Y-%m-%d %H:%M') if job.updated_at else '不明'}"
+                    }
+                ]
+            })
+        
+        # コメントがあれば追加
+        if comment:
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*コメント:*\n{comment}"
+                }
+            })
+        
+        blocks.append({
+            "type": "divider"
+        })
         
         # 要約を追加
         if job.summary:
