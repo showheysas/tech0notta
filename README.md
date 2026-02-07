@@ -2,6 +2,12 @@
 
 FastAPI で音声ファイルのアップロード、文字起こし、要約、Notion 連携、対話型リライト、Slack 通知を行うバックエンドです。  
 
+## 前提条件
+
+- Python 3.11以上
+- **FFmpeg** (動画ファイルから音声を抽出する場合に必要)
+  - インストール方法は [FFMPEG_SETUP.md](./FFMPEG_SETUP.md) を参照
+
 ## デプロイ
 
 - デプロイ先: Azure App Service (Linux)
@@ -35,10 +41,12 @@ FastAPI で音声ファイルのアップロード、文字起こし、要約、
 ## API
 
 ### POST /api/upload
-音声ファイルをアップロードします。
+音声ファイルまたは動画ファイルをアップロードします。
 
 - 入力（multipart/form-data）
-  - file: 音声ファイル（mp3 / wav など）
+  - file: 音声ファイル（mp3 / wav / m4a / aac / flac / ogg）または動画ファイル（mp4 / mov / avi / webm / mkv）
+  - 最大ファイルサイズ: 200MB
+  - 動画ファイルの場合、自動的に音声が抽出されます
 - 出力（JSON）
   - job_id: string
   - status: string

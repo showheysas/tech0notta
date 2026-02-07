@@ -51,7 +51,7 @@ class Settings(BaseSettings):
 
     # Application
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
-    MAX_FILE_SIZE_MB: int = 100
+    MAX_FILE_SIZE_MB: int = 200
 
     @property
     def cors_origins_list(self) -> List[str]:
