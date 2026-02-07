@@ -41,7 +41,7 @@ def get_job_stats(db: Session = Depends(get_db)):
     """
     ダッシュボード用統計情報を取得
     """
-    total_meetings = db.query(func.count(Job.id)).scalar()
+    total_meetings = db.query(func.count(Job.id)).scalar() or 0
 
     # 承認待ち: Notion作成完了以前のステータスで、かつ失敗していないもの
     # ここでは便宜的に「完了」していないものを承認待ちとするか、
@@ -52,18 +52,18 @@ def get_job_stats(db: Session = Depends(get_db)):
     
     pending_approval = db.query(func.count(Job.id)).filter(
         Job.status.in_([JobStatus.SUMMARIZED, JobStatus.TRANSCRIBED])
-    ).scalar()
+    ).scalar() or 0
 
     # Notion同期済み: status = COMPLETED 
     # または notion_page_url があるもの
     synced_notion = db.query(func.count(Job.id)).filter(
         Job.status == JobStatus.COMPLETED
-    ).scalar()
+    ).scalar() or 0
 
     return JobStatsResponse(
-        total_meetings=total_meetings or 0,
-        pending_approval=pending_approval or 0,
-        synced_notion=synced_notion or 0
+        total_meetings=total_meetings,
+        pending_approval=pending_approval,
+        synced_notion=synced_notion
     )
 
 @router.get("", response_model=List[JobResponse])
