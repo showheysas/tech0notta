@@ -3,8 +3,12 @@ from slack_sdk.errors import SlackApiError
 from app.config import settings
 from app.models.job import Job
 import logging
+from datetime import timezone, timedelta
 
 logger = logging.getLogger(__name__)
+
+# 日本時間のタイムゾーン
+JST = timezone(timedelta(hours=9))
 
 
 class SlackService:
@@ -76,7 +80,7 @@ class SlackService:
                     },
                     {
                         "type": "mrkdwn",
-                        "text": f"*作成日時:*\n{job.created_at.strftime('%Y-%m-%d %H:%M')}"
+                        "text": f"*作成日時:*\n{job.created_at.replace(tzinfo=timezone.utc).astimezone(JST).strftime('%Y-%m-%d %H:%M')}"
                     }
                 ]
             }
@@ -93,7 +97,7 @@ class SlackService:
                     },
                     {
                         "type": "mrkdwn",
-                        "text": f"*承認日時:*\n{job.updated_at.strftime('%Y-%m-%d %H:%M') if job.updated_at else '不明'}"
+                        "text": f"*承認日時:*\n{job.updated_at.replace(tzinfo=timezone.utc).astimezone(JST).strftime('%Y-%m-%d %H:%M') if job.updated_at else '不明'}"
                     }
                 ]
             })
