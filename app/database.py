@@ -32,6 +32,8 @@ def get_db():
 
 
 def init_db():
+    # 新規テーブルモデルをインポートして登録
+    import app.models.notification_db  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _ensure_jobs_columns()
     _ensure_chat_tables()

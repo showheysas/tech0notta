@@ -4,6 +4,7 @@ from app.config import settings
 from app.database import init_db
 from app.routers import upload, transcribe, summarize, notion, chat, approval
 from app.routers import zoom_webhook, bot_router, sync_router, jobs, live_router, rtms_router
+from app.routers import customers, deals, tasks, notifications
 import logging
 
 logging.basicConfig(
@@ -42,6 +43,12 @@ app.include_router(sync_router.router)
 app.include_router(live_router.router)
 app.include_router(rtms_router.router)
 
+# 新規機能ルーター（CRM、タスク管理、通知）
+app.include_router(customers.router)
+app.include_router(deals.router)
+app.include_router(tasks.router)
+app.include_router(notifications.router)
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -66,7 +73,21 @@ async def root():
             "chat_message_send": "POST /api/chat/sessions/{session_id}/messages",
             "chat_history": "GET /api/chat/sessions/{session_id}/messages",
             "chat_sessions_list": "GET /api/chat/sessions",
-            "approve": "POST /api/approve"
+            "approve": "POST /api/approve",
+            "customers": "GET /api/customers",
+            "customer_create": "POST /api/customers",
+            "customer_detail": "GET /api/customers/{customer_id}",
+            "deals": "GET /api/deals",
+            "deal_create": "POST /api/deals",
+            "deal_detail": "GET /api/deals/{deal_id}",
+            "tasks": "GET /api/tasks",
+            "task_extract": "POST /api/tasks/extract",
+            "task_decompose": "POST /api/tasks/decompose",
+            "task_register": "POST /api/tasks/register",
+            "task_detail": "GET /api/tasks/{task_id}",
+            "notification_meeting_approved": "POST /api/notifications/meeting-approved",
+            "notification_task_assigned": "POST /api/notifications/task-assigned",
+            "notification_reminder_batch": "GET /api/notifications/batch/reminder"
         }
     }
 

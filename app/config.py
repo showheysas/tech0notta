@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Notion (optional)
     NOTION_API_KEY: str = ""
     NOTION_DATABASE_ID: str = ""
+    NOTION_CUSTOMER_DB_ID: str = ""
+    NOTION_DEAL_DB_ID: str = ""
+    NOTION_TASK_DB_ID: str = ""
 
     # Slack
     SLACK_BOT_TOKEN: str | None = None
