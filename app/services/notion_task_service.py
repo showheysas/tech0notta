@@ -48,8 +48,8 @@ class NotionTaskService:
         due_date: date,
         priority: TaskPriority,
         status: TaskStatus,
-        project_id: str,
-        meeting_id: str,
+        project_id: Optional[str] = None,
+        meeting_page_id: Optional[str] = None,
         parent_task_id: Optional[str] = None
     ) -> str:
         """
@@ -63,7 +63,7 @@ class NotionTaskService:
             priority: 優先度
             status: ステータス
             project_id: プロジェクトID（Notion Page ID）
-            meeting_id: 議事録ID（Job ID）
+            meeting_page_id: 議事録ページID（Notion Page ID）
             parent_task_id: 親タスクID（サブタスクの場合）
 
         Returns:
@@ -79,39 +79,44 @@ class NotionTaskService:
             )
 
         try:
-            # タスクプロパティを構築
-            properties = {
-                "Name": {
-                    "title": [
-                        {
-                            "text": {
-                                "content": title
-                            }
+            # タスクプロパティを構築（実際のNotionDBプロパティ名を使用）
+            properties = {}
+            
+            # タスク名（Title）
+            properties["タスク名"] = {
+                "title": [
+                    {
+                        "text": {
+                            "content": title
                         }
-                    ]
-                },
-                "Due Date": {
-                    "date": {
-                        "start": due_date.isoformat()
                     }
-                },
-                "Status": {
-                    "select": {
-                        "name": status.value
-                    }
-                },
-                "Priority": {
-                    "select": {
-                        "name": priority.value
-                    }
+                ]
+            }
+            
+            # 期限（Date）
+            properties["期限"] = {
+                "date": {
+                    "start": due_date.isoformat()
+                }
+            }
+            
+            # ステータス（Select）
+            properties["ステータス"] = {
+                "select": {
+                    "name": status.value
+                }
+            }
+            
+            # 優先度（Select）
+            properties["優先度"] = {
+                "select": {
+                    "name": priority.value
                 }
             }
 
             # 担当者が指定されている場合（"未割り当て"以外）
-            # Note: Notion APIでPeopleプロパティを設定するには、
-            # ユーザーIDが必要です。ここでは担当者名をRich Textとして保存します。
             if assignee and assignee != "未割り当て":
-                properties["Assignee"] = {
+                properties["担当者"] = {
                     "rich_text": [
                         {
                             "text": {
@@ -121,32 +126,37 @@ class NotionTaskService:
                     ]
                 }
 
-            # プロジェクトリレーション
+            # MVPからリレーション形式にアップグレード
+            # 議事録、親タスクはリレーション、プロジェクトは将来実装予定
+            
+            # プロジェクト（テキスト）- 将来的にプロジェクトDB作成後にリレーション化
             if project_id:
-                properties["Project"] = {
-                    "relation": [
+                properties["プロジェクト"] = {
+                    "rich_text": [
                         {
-                            "id": project_id
+                            "text": {
+                                "content": str(project_id)
+                            }
                         }
                     ]
                 }
 
-            # 議事録リレーション
-            if meeting_id:
-                properties["Meeting"] = {
+            # 議事録（リレーション）- 議事録DBとのリレーション
+            if meeting_page_id:
+                properties["議事録"] = {
                     "relation": [
                         {
-                            "id": meeting_id
+                            "id": str(meeting_page_id)
                         }
                     ]
                 }
 
-            # 親タスクリレーション（サブタスクの場合）
+            # 親タスク（リレーション）- タスクDB内の他のタスクとのリレーション
             if parent_task_id:
-                properties["Parent Task"] = {
+                properties["親タスク"] = {
                     "relation": [
                         {
-                            "id": parent_task_id
+                            "id": str(parent_task_id)
                         }
                     ]
                 }
@@ -184,7 +194,7 @@ class NotionTaskService:
             logger.error(f"Notion API error creating task: {e.status} - {e.message}")
             raise
         except Exception as e:
-            logger.error(f"Error creating task in Notion: {e}")
+            logger.error(f"Error creating task in Notion: {e}", exc_info=True)
             raise
 
     @retry(
@@ -230,16 +240,17 @@ class NotionTaskService:
             filters = []
 
             if project_id:
+                # プロジェクトはまだテキスト形式
                 filters.append({
-                    "property": "Project",
-                    "relation": {
+                    "property": "プロジェクト",
+                    "rich_text": {
                         "contains": project_id
                     }
                 })
 
             if assignee:
                 filters.append({
-                    "property": "Assignee",
+                    "property": "担当者",
                     "rich_text": {
                         "contains": assignee
                     }
@@ -247,7 +258,7 @@ class NotionTaskService:
 
             if status:
                 filters.append({
-                    "property": "Status",
+                    "property": "ステータス",
                     "select": {
                         "equals": status.value
                     }
@@ -255,7 +266,7 @@ class NotionTaskService:
 
             if priority:
                 filters.append({
-                    "property": "Priority",
+                    "property": "優先度",
                     "select": {
                         "equals": priority.value
                     }
@@ -263,7 +274,7 @@ class NotionTaskService:
 
             if due_date_from:
                 filters.append({
-                    "property": "Due Date",
+                    "property": "期限",
                     "date": {
                         "on_or_after": due_date_from.isoformat()
                     }
@@ -271,7 +282,7 @@ class NotionTaskService:
 
             if due_date_to:
                 filters.append({
-                    "property": "Due Date",
+                    "property": "期限",
                     "date": {
                         "on_or_before": due_date_to.isoformat()
                     }
@@ -387,7 +398,7 @@ class NotionTaskService:
             properties = {}
 
             if title is not None:
-                properties["Name"] = {
+                properties["タスク名"] = {
                     "title": [
                         {
                             "text": {
@@ -399,7 +410,7 @@ class NotionTaskService:
 
             if assignee is not None:
                 if assignee and assignee != "未割り当て":
-                    properties["Assignee"] = {
+                    properties["担当者"] = {
                         "rich_text": [
                             {
                                 "text": {
@@ -410,33 +421,33 @@ class NotionTaskService:
                     }
                 else:
                     # 担当者をクリア
-                    properties["Assignee"] = {
+                    properties["担当者"] = {
                         "rich_text": []
                     }
 
             if due_date is not None:
-                properties["Due Date"] = {
+                properties["期限"] = {
                     "date": {
                         "start": due_date.isoformat()
                     }
                 }
 
             if status is not None:
-                properties["Status"] = {
+                properties["ステータス"] = {
                     "select": {
                         "name": status.value
                     }
                 }
 
             if priority is not None:
-                properties["Priority"] = {
+                properties["優先度"] = {
                     "select": {
                         "name": priority.value
                     }
                 }
 
             if completion_date is not None:
-                properties["Completion Date"] = {
+                properties["完了日"] = {
                     "date": {
                         "start": completion_date.isoformat()
                     }
@@ -510,51 +521,83 @@ class NotionTaskService:
         
         # タイトルを取得
         title = ""
-        if "Name" in properties and properties["Name"]["title"]:
-            title = properties["Name"]["title"][0]["text"]["content"]
+        if "タスク名" in properties and properties["タスク名"].get("title"):
+            title = properties["タスク名"]["title"][0]["text"]["content"]
         
         # 担当者を取得
         assignee = None
-        if "Assignee" in properties and properties["Assignee"]["rich_text"]:
-            assignee = properties["Assignee"]["rich_text"][0]["text"]["content"]
+        if "担当者" in properties and properties["担当者"].get("rich_text"):
+            rich_text = properties["担当者"]["rich_text"]
+            if rich_text:
+                assignee = rich_text[0]["text"]["content"]
         
         # 期限を取得
         due_date = None
-        if "Due Date" in properties and properties["Due Date"]["date"]:
-            due_date_str = properties["Due Date"]["date"]["start"]
+        if "期限" in properties and properties["期限"].get("date"):
+            due_date_str = properties["期限"]["date"]["start"]
             due_date = date.fromisoformat(due_date_str)
         
         # ステータスを取得
         status = TaskStatus.NOT_STARTED
-        if "Status" in properties and properties["Status"]["select"]:
-            status_name = properties["Status"]["select"]["name"]
-            status = TaskStatus(status_name)
+        if "ステータス" in properties and properties["ステータス"].get("select"):
+            status_name = properties["ステータス"]["select"]["name"]
+            try:
+                status = TaskStatus(status_name)
+            except ValueError:
+                # 英語のステータス名を日本語に変換
+                status_mapping = {
+                    "Not Started": TaskStatus.NOT_STARTED,
+                    "In Progress": TaskStatus.IN_PROGRESS,
+                    "Completed": TaskStatus.COMPLETED,
+                    "未着手": TaskStatus.NOT_STARTED,
+                    "進行中": TaskStatus.IN_PROGRESS,
+                    "完了": TaskStatus.COMPLETED,
+                }
+                status = status_mapping.get(status_name, TaskStatus.NOT_STARTED)
         
         # 優先度を取得
         priority = TaskPriority.MEDIUM
-        if "Priority" in properties and properties["Priority"]["select"]:
-            priority_name = properties["Priority"]["select"]["name"]
-            priority = TaskPriority(priority_name)
+        if "優先度" in properties and properties["優先度"].get("select"):
+            priority_name = properties["優先度"]["select"]["name"]
+            try:
+                priority = TaskPriority(priority_name)
+            except ValueError:
+                # 英語の優先度名を日本語に変換
+                priority_mapping = {
+                    "High": TaskPriority.HIGH,
+                    "Medium": TaskPriority.MEDIUM,
+                    "Low": TaskPriority.LOW,
+                    "高": TaskPriority.HIGH,
+                    "中": TaskPriority.MEDIUM,
+                    "低": TaskPriority.LOW,
+                }
+                priority = priority_mapping.get(priority_name, TaskPriority.MEDIUM)
         
-        # プロジェクトIDを取得
+        # プロジェクトIDを取得（テキスト形式）
         project_id = None
-        if "Project" in properties and properties["Project"]["relation"]:
-            project_id = properties["Project"]["relation"][0]["id"]
+        if "プロジェクト" in properties and properties["プロジェクト"].get("rich_text"):
+            rich_text = properties["プロジェクト"]["rich_text"]
+            if rich_text:
+                project_id = rich_text[0]["text"]["content"]
         
-        # 議事録IDを取得
+        # 議事録IDを取得（リレーション形式）
         meeting_id = None
-        if "Meeting" in properties and properties["Meeting"]["relation"]:
-            meeting_id = properties["Meeting"]["relation"][0]["id"]
+        if "議事録" in properties and properties["議事録"].get("relation"):
+            relations = properties["議事録"]["relation"]
+            if relations:
+                meeting_id = relations[0]["id"]
         
-        # 親タスクIDを取得
+        # 親タスクIDを取得（リレーション形式）
         parent_task_id = None
-        if "Parent Task" in properties and properties["Parent Task"]["relation"]:
-            parent_task_id = properties["Parent Task"]["relation"][0]["id"]
+        if "親タスク" in properties and properties["親タスク"].get("relation"):
+            relations = properties["親タスク"]["relation"]
+            if relations:
+                parent_task_id = relations[0]["id"]
         
         # 完了日を取得
         completion_date = None
-        if "Completion Date" in properties and properties["Completion Date"]["date"]:
-            completion_date_str = properties["Completion Date"]["date"]["start"]
+        if "完了日" in properties and properties["完了日"].get("date"):
+            completion_date_str = properties["完了日"]["date"]["start"]
             completion_date = date.fromisoformat(completion_date_str)
         
         # 作成日時・更新日時を取得

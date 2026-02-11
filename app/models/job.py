@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Text, Enum as SQLEnum
+from sqlalchemy import Column, String, Integer, DateTime, Text, Date, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -14,6 +14,8 @@ class JobStatus(str, Enum):
     TRANSCRIBED = "transcribed"
     SUMMARIZING = "summarizing"
     SUMMARIZED = "summarized"
+    EXTRACTING_METADATA = "extracting_metadata"  # メタデータ抽出中
+    REVIEWING = "reviewing"  # 確認・修正中
     CREATING_NOTION = "creating_notion"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -39,6 +41,11 @@ class Job(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     duration = Column(Integer, nullable=True)  # 秒単位
     last_viewed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # メタデータフィールド（MVP新機能）
+    job_metadata = Column(Text, nullable=True)  # JSON形式: mtg_name, participants, meeting_date, etc.
+    extracted_tasks = Column(Text, nullable=True)  # JSON形式: 抽出されたタスク（承認前の一時保存用）
+    meeting_date = Column(Date, nullable=True)  # 会議日（メタデータから抽出）
     
     # リレーション
     chat_sessions = relationship("ChatSession", back_populates="job")

@@ -83,11 +83,22 @@ class TaskCreate(BaseModel):
     subtasks: Optional[List[SubTaskCreate]] = None
 
 
+class TaskToRegister(BaseModel):
+    """登録用タスク（MVP新機能）"""
+    title: str
+    description: Optional[str] = None
+    assignee: str = "未割り当て"
+    due_date: date
+    priority: TaskPriority = TaskPriority.MEDIUM
+    subtasks: List[SubTaskItem] = []
+
+
 class TaskRegisterRequest(BaseModel):
     """タスク登録リクエスト"""
     job_id: str
-    project_id: str
-    tasks: List[TaskCreate]
+    project_id: Optional[str] = None
+    meeting_page_id: Optional[str] = None  # 議事録のNotion Page ID
+    tasks: List[TaskToRegister]
 
 
 class TaskRegisterResponse(BaseModel):

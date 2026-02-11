@@ -297,6 +297,11 @@ class TaskService:
             from app.services.notion_task_service import get_notion_task_service
             notion_service = get_notion_task_service()
             
+            # 議事録のページIDを取得
+            meeting_page_id = None
+            if hasattr(request, 'meeting_page_id') and request.meeting_page_id:
+                meeting_page_id = request.meeting_page_id
+            
             task_ids = []
             
             # 各タスクを登録
@@ -311,7 +316,7 @@ class TaskService:
                         priority=task.priority,
                         status=TaskStatus.NOT_STARTED,
                         project_id=request.project_id,
-                        meeting_id=request.job_id,
+                        meeting_page_id=meeting_page_id,
                         parent_task_id=None
                     )
                     
@@ -330,7 +335,7 @@ class TaskService:
                                 priority=task.priority,  # 親タスクの優先度を継承
                                 status=TaskStatus.NOT_STARTED,
                                 project_id=request.project_id,
-                                meeting_id=request.job_id,
+                                meeting_page_id=meeting_page_id,
                                 parent_task_id=parent_task_id
                             )
                             

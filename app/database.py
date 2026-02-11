@@ -37,6 +37,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _ensure_jobs_columns()
     _ensure_chat_tables()
+    _ensure_metadata_columns()  # MVP新機能用カラム追加
 
 
 def _ensure_jobs_columns():
@@ -53,6 +54,39 @@ def _ensure_jobs_columns():
     if "last_viewed_at" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE jobs ADD COLUMN last_viewed_at DATETIME"))
+
+
+def _ensure_metadata_columns():
+    """MVP新機能用のメタデータカラムを追加"""
+    inspector = inspect(engine)
+    if "jobs" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("jobs")}
+    
+    # job_metadata カラム（JSON形式でメタデータを保存）
+    # 旧カラム名 meeting_metadata から job_metadata にリネーム
+    if "meeting_metadata" in columns and "job_metadata" not in columns:
+        with engine.begin() as conn:
+            # SQLiteの場合はカラムリネームが制限されているため、データをコピーして新カラムを作成
+            if settings.DATABASE_URL.startswith("sqlite"):
+                conn.execute(text("ALTER TABLE jobs ADD COLUMN job_metadata TEXT"))
+                conn.execute(text("UPDATE jobs SET job_metadata = meeting_metadata"))
+                # SQLiteではALTER TABLE DROP COLUMNがサポートされていないため、旧カラムは残す
+            else:
+                conn.execute(text("ALTER TABLE jobs RENAME COLUMN meeting_metadata TO job_metadata"))
+    elif "job_metadata" not in columns and "meeting_metadata" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN job_metadata TEXT"))
+    
+    # extracted_tasks カラム（JSON形式で抽出タスクを保存）
+    if "extracted_tasks" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN extracted_tasks TEXT"))
+    
+    # meeting_date カラム（会議日）
+    if "meeting_date" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN meeting_date DATE"))
 
 
 def _ensure_chat_tables():
