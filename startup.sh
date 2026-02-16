@@ -2,8 +2,10 @@
 set -euo pipefail
 
 # FFmpegをインストール（動画から音声を抽出するために必要）
+# タイムアウト120秒を設定し、失敗してもアプリ起動をブロックしない
 echo "Installing FFmpeg..."
-apt-get update -qq && apt-get install -y -qq ffmpeg > /dev/null 2>&1 || echo "FFmpeg installation failed or already installed"
+timeout 120 bash -c 'apt-get update -qq 2>/dev/null && apt-get install -y -qq ffmpeg 2>/dev/null' \
+  || echo "WARNING: FFmpeg installation skipped (timeout or error). Video-to-audio extraction may not work."
 
 PORT="${PORT:-8000}"
 # Longer timeout for batch transcription polling, single worker to reduce memory.
