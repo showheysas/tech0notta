@@ -24,6 +24,7 @@ class MetadataResponse(BaseModel):
     meeting_date: Optional[str] = None
     meeting_type: Optional[str] = None
     project: Optional[str] = None
+    project_id: Optional[str] = None  # Notion案件ページID
     key_stakeholders: List[str] = []
     key_team: Optional[str] = None
     search_keywords: Optional[str] = None
@@ -458,6 +459,17 @@ async def process_approval_background(
                 job.notion_page_url = notion_result.get("url")
                 db.commit()
                 logger.info(f"Created Notion page for job {job_id}: {job.notion_page_url}")
+                
+                # 案件リレーションを設定
+                if request.project_id and job.notion_page_id:
+                    try:
+                        await notion_client.update_meeting_project_relation(
+                            meeting_page_id=job.notion_page_id,
+                            project_page_id=request.project_id
+                        )
+                        logger.info(f"Set project relation for job {job_id}: {request.project_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to set project relation for job {job_id}: {e}")
             else:
                 logger.error(f"Notion client returned None for job {job_id}")
             
@@ -619,6 +631,15 @@ async def approve_job(
     job.status = JobStatus.CREATING_NOTION.value
     job.updated_at = datetime.utcnow()
     db.commit()
+    
+    # メタデータからproject_idを取得（リクエストで未指定の場合）
+    if not request.project_id and job.job_metadata:
+        try:
+            metadata_dict = json.loads(job.job_metadata)
+            if metadata_dict.get("project_id"):
+                request.project_id = metadata_dict["project_id"]
+        except (json.JSONDecodeError, TypeError):
+            pass
     
     # バックグラウンドで処理を実行（DBセッションは渡さない - バックグラウンドタスク内で新規作成）
     background_tasks.add_task(process_approval_background, job_id, request)

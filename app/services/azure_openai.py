@@ -1,5 +1,6 @@
 from openai import AzureOpenAI
 from app.config import settings
+from app.services.prompt_loader import load_prompt
 from typing import List, Generator
 import logging
 
@@ -17,38 +18,28 @@ class AzureOpenAIService:
 
     def generate_summary(self, transcription: str, template_prompt: str | None = None) -> str:
         try:
-            system_prompt = """あなたは議事録を要約する専門家です。
-以下の議事録を、次の形式で要約してください:
+            # 優先順位: 1) API引数 template_prompt  2) ファイルから読み込み  3) フォールバック
+            if template_prompt and template_prompt.strip():
+                prompt = template_prompt.strip()
+                logger.info("Using template_prompt from API request")
+            else:
+                file_prompt = load_prompt()  # app/prompts/summary_default.md
+                if file_prompt:
+                    prompt = file_prompt
+                    logger.info("Using prompt from file: summary_default.md")
+                else:
+                    # フォールバック（ファイルが見つからない場合）
+                    prompt = "あなたは議事録を要約する専門家です。会議の文字起こしデータを構造化された議事録形式に変換してください。"
+                    logger.warning("Prompt file not found, using fallback prompt")
 
-## 概要
-会議の全体的な目的と主なトピックを簡潔にまとめてください。
-
-## 主な議題
-- 議論された主要なトピックをリスト形式で記載
-- それぞれのポイントについて簡潔に説明
-
-## 決定事項
-- 会議で決まった事項をリスト形式で記載
-- 具体的な決定内容を明確に
-
-## アクションアイテム
-- 誰が何をいつまでにするかを明記
-- フォローアップが必要な項目
-
-## 次回の議題
-- 次回の会議で取り上げるべき項目があれば記載
-
-簡潔で分かりやすい日本語でまとめてください。"""
-
-            prompt = template_prompt.strip() if template_prompt else system_prompt
             response = self.client.chat.completions.create(
                 model=self.deployment_name,
                 messages=[
                     {"role": "system", "content": prompt},
-                    {"role": "user", "content": f"以下の議事録を要約してください:\n\n{transcription}"}
+                    {"role": "user", "content": f"以下の会議文字起こしデータを構造化された議事録に変換してください:\n\n{transcription}"}
                 ],
                 temperature=0.3,
-                max_tokens=2000
+                max_tokens=8000
             )
 
             summary = response.choices[0].message.content

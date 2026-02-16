@@ -5,6 +5,7 @@ from app.database import init_db
 from app.routers import upload, transcribe, summarize, notion, chat, approval
 from app.routers import zoom_webhook, bot_router, sync_router, jobs, live_router, rtms_router
 from app.routers import customers, deals, tasks, notifications
+from app.routers import projects as projects_router
 import logging
 
 logging.basicConfig(
@@ -48,6 +49,7 @@ app.include_router(customers.router)
 app.include_router(deals.router)
 app.include_router(tasks.router)
 app.include_router(notifications.router)
+app.include_router(projects_router.router)
 
 
 @app.on_event("startup")
@@ -87,7 +89,9 @@ async def root():
             "task_detail": "GET /api/tasks/{task_id}",
             "notification_meeting_approved": "POST /api/notifications/meeting-approved",
             "notification_task_assigned": "POST /api/notifications/task-assigned",
-            "notification_reminder_batch": "GET /api/notifications/batch/reminder"
+            "notification_reminder_batch": "GET /api/notifications/batch/reminder",
+            "projects": "GET /api/projects",
+            "project_create": "POST /api/projects"
         }
     }
 
