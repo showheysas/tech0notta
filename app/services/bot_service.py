@@ -1,6 +1,6 @@
 """
 Bot派遣サービス
-ZoomミーティングへのBot派遣を管理する
+Zoom / Google Meet / Microsoft Teams へのBot派遣を管理する
 """
 import asyncio
 import logging
@@ -28,6 +28,13 @@ class BotStatus(str, Enum):
     ERROR = "error"              # エラー
 
 
+class BotPlatform(str, Enum):
+    """Botが参加する会議プラットフォーム"""
+    ZOOM = "zoom"
+    GOOGLE_MEET = "google_meet"
+    TEAMS = "teams"
+
+
 @dataclass
 class BotSession:
     """Bot派遣セッション"""
@@ -39,7 +46,9 @@ class BotSession:
     updated_at: datetime
     container_id: Optional[str] = None
     error_message: Optional[str] = None
-    
+    platform: BotPlatform = BotPlatform.ZOOM
+    meeting_url: Optional[str] = None
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -48,7 +57,9 @@ class BotSession:
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "container_id": self.container_id,
-            "error_message": self.error_message
+            "error_message": self.error_message,
+            "platform": self.platform.value,
+            "meeting_url": self.meeting_url,
         }
 
 
@@ -94,88 +105,114 @@ class BotService:
         # 後方互換性のため残すが、内部では _parse_meeting_url を使う
         mid, _ = self._parse_meeting_url(meeting_url_or_id)
         return mid
-    
+
+    def _detect_platform(self, url: str) -> BotPlatform:
+        """URLからプラットフォームを自動判定"""
+        if "meet.google.com" in url:
+            return BotPlatform.GOOGLE_MEET
+        if "teams.microsoft.com" in url or "teams.live.com" in url:
+            return BotPlatform.TEAMS
+        return BotPlatform.ZOOM  # zoom.us / 数字IDはZoom
+
     async def dispatch_bot(
         self,
         meeting_id: str,
-        password: Optional[str] = None
+        password: Optional[str] = None,
+        meeting_url: Optional[str] = None,
+        platform: Optional[BotPlatform] = None,
     ) -> BotSession:
         """
         Botを会議に派遣
-        
+
         Args:
             meeting_id: 会議ID（URLでも可）
-            password: 会議パスワード
-        
+            password: 会議パスワード（Zoomのみ）
+            meeting_url: 会議URL（Google Meet / Teams で必須）
+            platform: プラットフォーム（省略時は自動判定）
+
         Returns:
             BotSession
         """
-        clean_meeting_id, extracted_password = self._parse_meeting_url(meeting_id)
-        
-        # 引数のpasswordがあればそれを優先、なければURLから抽出したものを使用
-        final_password = password or extracted_password
-        
-        if not clean_meeting_id:
-            raise ValueError("有効な会議IDまたはURLを指定してください")
-        
-        # SDK設定チェック
-        if not sdk_jwt_service.is_configured():
-            raise ValueError(
-                "SDK設定が不完全です。"
-                "ZOOM_SDK_KEY, ZOOM_SDK_SECRETを設定してください。"
+        # プラットフォーム自動判定
+        if platform is None:
+            platform = self._detect_platform(meeting_url or meeting_id)
+
+        if platform == BotPlatform.ZOOM:
+            # Zoom: URLからID/パスワードを抽出
+            clean_meeting_id, extracted_password = self._parse_meeting_url(meeting_id)
+            final_password = password or extracted_password
+
+            if not clean_meeting_id:
+                raise ValueError("有効なZoom会議IDまたはURLを指定してください")
+
+            if not sdk_jwt_service.is_configured():
+                raise ValueError(
+                    "SDK設定が不完全です。"
+                    "ZOOM_SDK_KEY, ZOOM_SDK_SECRETを設定してください。"
+                )
+
+            jwt_token = sdk_jwt_service.generate_jwt(
+                meeting_number=clean_meeting_id,
+                role=0  # 参加者として参加
             )
-        
+            if not jwt_token:
+                raise ValueError("SDK JWT生成に失敗しました")
+        else:
+            # Google Meet / Teams: URLをそのまま使用
+            clean_meeting_id = meeting_url or meeting_id
+            final_password = None
+            jwt_token = None
+
+            if not clean_meeting_id:
+                raise ValueError("有効な会議URLを指定してください")
+
         # セッション作成
         session_id = str(uuid.uuid4())
         now = datetime.utcnow()
-        
+
         session = BotSession(
             id=session_id,
             meeting_id=clean_meeting_id,
             meeting_password=final_password,
             status=BotStatus.PENDING,
             created_at=now,
-            updated_at=now
+            updated_at=now,
+            platform=platform,
+            meeting_url=meeting_url,
         )
         self._sessions[session_id] = session
-        
+
         logger.info(
             f"🤖 Bot派遣セッション作成: "
-            f"session_id={session_id}, meeting_id={clean_meeting_id}"
+            f"session_id={session_id}, meeting_id={clean_meeting_id}, "
+            f"platform={platform.value}"
         )
-        
-        # JWT生成
-        jwt_token = sdk_jwt_service.generate_jwt(
-            meeting_number=clean_meeting_id,
-            role=0  # 参加者として参加
-        )
-        
-        if not jwt_token:
-            session.status = BotStatus.ERROR
-            session.error_message = "SDK JWT生成に失敗しました"
-            session.updated_at = datetime.utcnow()
-            raise ValueError(session.error_message)
-        
+
         # Bot Runnerを起動（非同期）
-        asyncio.create_task(
-            self._run_bot(session, jwt_token)
-        )
-        
+        asyncio.create_task(self._run_bot(session, jwt_token))
+
         return session
-    
-    async def _run_bot(self, session: BotSession, jwt_token: str) -> None:
+
+    async def _run_bot(self, session: BotSession, jwt_token: Optional[str]) -> None:
+        """プラットフォームに応じてBot Runnerコンテナを起動"""
+        if session.platform == BotPlatform.ZOOM:
+            await self._run_zoom_bot(session, jwt_token)
+        else:
+            await self._run_browser_bot(session)
+
+    async def _run_zoom_bot(self, session: BotSession, jwt_token: Optional[str]) -> None:
         """
-        Bot Runnerコンテナを起動して会議に参加
+        Zoom Bot Runnerコンテナを起動して会議に参加
         """
         try:
             session.status = BotStatus.JOINING
             session.updated_at = datetime.utcnow()
-            
+
             logger.info(
-                f"🚀 Bot起動開始: session_id={session.id}, "
+                f"🚀 Zoom Bot起動開始: session_id={session.id}, "
                 f"meeting_id={session.meeting_id}"
             )
-            
+
             # ライブ文字起こしサービスにセッションを作成
             from app.services.live_transcription_service import live_transcription_service
             live_transcription_service.create_session(
@@ -183,16 +220,14 @@ class BotService:
                 meeting_id=session.meeting_id,
                 meeting_topic=f"会議 {session.meeting_id}"
             )
-            
+
             # Dockerコンテナ起動
-            # BACKEND_URLはホストからアクセスするため host.docker.internal を使用
             backend_url = "http://host.docker.internal:8000"
-            
-            # Azure Speech 設定を取得
+
             from app.config import settings
             azure_speech_key = settings.AZURE_SPEECH_KEY or ""
             azure_speech_region = settings.AZURE_SPEECH_REGION or "japaneast"
-            
+
             cmd = [
                 "docker", "run", "-d", "--rm",
                 "--add-host=host.docker.internal:host-gateway",
@@ -206,30 +241,109 @@ class BotService:
                 "-e", f"AZURE_SPEECH_REGION={azure_speech_region}",
                 "tech-notta-bot"
             ]
-            
+
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            
+
             stdout, stderr = await process.communicate()
-            
+
             if process.returncode == 0:
                 container_id = stdout.decode().strip()
                 session.container_id = container_id
                 session.status = BotStatus.IN_MEETING
                 session.updated_at = datetime.utcnow()
-                logger.info(f"✅ Bot参加完了 (Container: {container_id}): session_id={session.id}")
+                logger.info(f"✅ Zoom Bot参加完了 (Container: {container_id}): session_id={session.id}")
             else:
                 error_msg = stderr.decode().strip()
-                logger.error(f"Botコンテナ起動失敗: {error_msg}")
+                logger.error(f"Zoom Botコンテナ起動失敗: {error_msg}")
                 session.status = BotStatus.ERROR
                 session.error_message = f"コンテナ起動失敗: {error_msg}"
                 session.updated_at = datetime.utcnow()
-            
+
         except Exception as e:
-            logger.error(f"Bot起動エラー: {e}")
+            logger.error(f"Zoom Bot起動エラー: {e}")
+            session.status = BotStatus.ERROR
+            session.error_message = str(e)
+            session.updated_at = datetime.utcnow()
+
+    async def _run_browser_bot(self, session: BotSession) -> None:
+        """
+        ブラウザBot（Google Meet / Teams）コンテナを起動して会議に参加
+        """
+        try:
+            session.status = BotStatus.JOINING
+            session.updated_at = datetime.utcnow()
+
+            logger.info(
+                f"🚀 ブラウザBot起動開始: session_id={session.id}, "
+                f"platform={session.platform.value}, meeting_url={session.meeting_url}"
+            )
+
+            # ライブ文字起こしサービスにセッションを作成
+            from app.services.live_transcription_service import live_transcription_service
+            live_transcription_service.create_session(
+                session_id=session.id,
+                meeting_id=session.meeting_id,
+                meeting_topic=f"会議 {session.meeting_id}"
+            )
+
+            from app.config import settings
+            from app.google_meet_config import google_meet_config
+            from app.teams_config import teams_config
+
+            backend_url = "http://host.docker.internal:8000"
+            azure_speech_key = settings.AZURE_SPEECH_KEY or ""
+            azure_speech_region = settings.AZURE_SPEECH_REGION or "japaneast"
+
+            if session.platform == BotPlatform.GOOGLE_MEET:
+                bot_name = google_meet_config.bot_display_name
+            else:
+                bot_name = teams_config.bot_display_name
+
+            cmd = [
+                "docker", "run", "-d", "--rm",
+                "--add-host=host.docker.internal:host-gateway",
+                "--shm-size=2g",
+                "-e", f"PLATFORM={session.platform.value}",
+                "-e", f"MEETING_URL={session.meeting_url or ''}",
+                "-e", f"MEETING_ID={session.meeting_id}",
+                "-e", f"BOT_NAME={bot_name}",
+                "-e", f"BACKEND_URL={backend_url}",
+                "-e", f"SESSION_ID={session.id}",
+                "-e", f"AZURE_SPEECH_KEY={azure_speech_key}",
+                "-e", f"AZURE_SPEECH_REGION={azure_speech_region}",
+                "tech-notta-browser-bot"
+            ]
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            stdout, stderr = await process.communicate()
+
+            if process.returncode == 0:
+                container_id = stdout.decode().strip()
+                session.container_id = container_id
+                session.status = BotStatus.IN_MEETING
+                session.updated_at = datetime.utcnow()
+                logger.info(
+                    f"✅ ブラウザBot参加完了 (Container: {container_id}): "
+                    f"session_id={session.id}"
+                )
+            else:
+                error_msg = stderr.decode().strip()
+                logger.error(f"ブラウザBotコンテナ起動失敗: {error_msg}")
+                session.status = BotStatus.ERROR
+                session.error_message = f"コンテナ起動失敗: {error_msg}"
+                session.updated_at = datetime.utcnow()
+
+        except Exception as e:
+            logger.error(f"ブラウザBot起動エラー: {e}")
             session.status = BotStatus.ERROR
             session.error_message = str(e)
             session.updated_at = datetime.utcnow()
