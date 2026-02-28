@@ -7,7 +7,7 @@ name: Build and deploy Python app to Azure Web App - app-002-tech0notta-backend-
 on:
   push:
     branches:
-      - main
+      - feature/google-meet-teams-bot
   workflow_dispatch:
 
 jobs:
@@ -63,4 +63,5 @@ jobs:
         with:
           app-name: 'app-002-tech0notta-backend-dev'
           slot-name: 'Production'
+
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1010E70D51A44CF8BA59D8842F5C80C2 }}
