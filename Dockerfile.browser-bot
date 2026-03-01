@@ -23,17 +23,18 @@ RUN pip3 install --no-cache-dir httpx tenacity && \
     playwright install-deps chromium
 
 # 既存bot_runnerスクリプトを共用（音声キャプチャ・文字起こし・アップロード）
-COPY app/bot_runner/setup-pulseaudio.sh /app/setup-pulseaudio.sh
-COPY app/bot_runner/audio_capture.sh    /app/audio_capture.sh
-COPY app/bot_runner/realtime_transcriber.py /app/realtime_transcriber.py
-COPY app/bot_runner/upload_workflow.py  /app/upload_workflow.py
+# ビルドコンテキスト = プロジェクトルート (tech0notta/)
+COPY backend/app/bot_runner/setup-pulseaudio.sh /app/setup-pulseaudio.sh
+COPY backend/app/bot_runner/audio_capture.sh    /app/audio_capture.sh
+COPY backend/app/bot_runner/realtime_transcriber.py /app/realtime_transcriber.py
+COPY backend/app/bot_runner/upload_workflow.py  /app/upload_workflow.py
 RUN chmod +x /app/setup-pulseaudio.sh /app/audio_capture.sh
 
 # ブラウザBot固有スクリプト
-COPY app/browser_bot/entrypoint.py      /app/entrypoint.py
-COPY app/browser_bot/google_meet_bot.py /app/google_meet_bot.py
-COPY app/browser_bot/teams_bot.py       /app/teams_bot.py
-COPY app/browser_bot/entrypoint.sh      /app/entrypoint.sh
+COPY backend/app/browser_bot/entrypoint.py      /app/entrypoint.py
+COPY backend/app/browser_bot/google_meet_bot.py /app/google_meet_bot.py
+COPY backend/app/browser_bot/teams_bot.py       /app/teams_bot.py
+COPY backend/app/browser_bot/entrypoint.sh      /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 RUN mkdir -p /app/recordings
