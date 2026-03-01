@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.services.bot_service import bot_service, BotStatus
+from app.services.bot_service import bot_service, BotStatus, BotPlatform
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,8 @@ router = APIRouter(prefix="/api/bot", tags=["bot"])
 class DispatchBotRequest(BaseModel):
     """Bot派遣リクエスト"""
     meeting_id: str  # 会議ID or URL
-    password: Optional[str] = None  # 会議パスワード
+    password: Optional[str] = None  # 会議パスワード（Zoomのみ）
+    meeting_url: Optional[str] = None  # 会議URL（Google Meet / Teams で使用）
 
 
 class BotSessionResponse(BaseModel):
@@ -32,6 +33,8 @@ class BotSessionResponse(BaseModel):
     updated_at: str
     container_id: Optional[str] = None
     error_message: Optional[str] = None
+    platform: str = "zoom"
+    meeting_url: Optional[str] = None
 
 
 class DispatchBotResponse(BaseModel):
@@ -67,7 +70,8 @@ async def dispatch_bot(request: DispatchBotRequest):
     try:
         session = await bot_service.dispatch_bot(
             meeting_id=request.meeting_id,
-            password=request.password
+            password=request.password,
+            meeting_url=request.meeting_url,
         )
         
         return DispatchBotResponse(

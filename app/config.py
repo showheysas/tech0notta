@@ -53,6 +53,15 @@ class Settings(BaseSettings):
     ZOOM_SDK_KEY: str | None = None
     ZOOM_SDK_SECRET: str | None = None
 
+    # ACI / ACR
+    AZURE_SUBSCRIPTION_ID: str | None = None
+    AZURE_RESOURCE_GROUP: str | None = None
+    ACI_LOCATION: str = "japaneast"
+    ACR_SERVER: str | None = None      # e.g. myregistry.azurecr.io
+    ACR_USERNAME: str | None = None
+    ACR_PASSWORD: str | None = None
+    BACKEND_URL: str = "http://localhost:8000"
+
     # Application
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
     MAX_FILE_SIZE_MB: int = 200

@@ -1,4 +1,4 @@
-FROM --platform=linux/arm64 ubuntu:22.04
+FROM --platform=linux/amd64 ubuntu:22.04
 
 # 環境変数の設定
 ENV DEBIAN_FRONTEND=noninteractive
@@ -63,12 +63,13 @@ ENV LD_LIBRARY_PATH=/app/sdk:/app/sdk/qt_libs/Qt/lib:$LD_LIBRARY_PATH
 # 作業ディレクトリの設定
 WORKDIR /app
 
-# ----- SDKのコピー (ARM64版) -----
-COPY zoom-meeting-sdk-linux_arm64-6.7.2.7022 /app/sdk
+# ----- SDKのコピー (x86_64版) -----
+# ビルドコンテキスト = プロジェクトルート (tech0notta/)
+COPY zoom-meeting-sdk-linux_x86_64-6.7.5.7391 /app/sdk
 RUN ln -s /app/sdk/libmeetingsdk.so /app/sdk/libmeetingsdk.so.1
 
 # ----- C++ Bot ビルド -----
-COPY app/zoom_bot /app/zoom_bot_src
+COPY backend/app/zoom_bot /app/zoom_bot_src
 
 # CMakeビルド
 RUN mkdir -p /app/zoom_bot_src/build && \
@@ -78,30 +79,30 @@ RUN mkdir -p /app/zoom_bot_src/build && \
     cp ZoomMeetingBot /app/zoom_bot
 
 # ----- Pythonラッパー -----
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-COPY app /app/app
+COPY backend/app /app/app
 
 # PulseAudio設定スクリプト
-COPY app/bot_runner/setup-pulseaudio.sh /app/setup-pulseaudio.sh
+COPY backend/app/bot_runner/setup-pulseaudio.sh /app/setup-pulseaudio.sh
 RUN chmod +x /app/setup-pulseaudio.sh
 
 # 音声キャプチャスクリプト
-COPY app/bot_runner/audio_capture.sh /app/audio_capture.sh
+COPY backend/app/bot_runner/audio_capture.sh /app/audio_capture.sh
 RUN chmod +x /app/audio_capture.sh
 
 # アップロード・ワークフロースクリプト
-COPY app/bot_runner/upload_workflow.py /app/upload_workflow.py
+COPY backend/app/bot_runner/upload_workflow.py /app/upload_workflow.py
 
 # リアルタイム文字起こしスクリプト
-COPY app/bot_runner/realtime_transcriber.py /app/realtime_transcriber.py
+COPY backend/app/bot_runner/realtime_transcriber.py /app/realtime_transcriber.py
 
 # Pythonエントリーポイント
-COPY app/bot_runner/entrypoint.py /app/entrypoint.py
+COPY backend/app/bot_runner/entrypoint.py /app/entrypoint.py
 
 # config_generator.py (entrypoint.pyからインポートされる)
-COPY app/bot_runner/config_generator.py /app/config_generator.py
+COPY backend/app/bot_runner/config_generator.py /app/config_generator.py
 
 # 録音保存ディレクトリ
 RUN mkdir -p /app/recordings
