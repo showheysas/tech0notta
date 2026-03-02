@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y \
     python3 python3-pip \
     # PulseAudio（音声キャプチャ）
     pulseaudio pulseaudio-utils \
+    # ALSA → PulseAudio ルーティング（Azure Speech SDK が PulseAudio を使えるようにする）
+    libasound2-plugins \
     # Chromium依存ライブラリ
     libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
     libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
@@ -14,13 +16,25 @@ RUN apt-get update && apt-get install -y \
     xvfb \
     && rm -rf /var/lib/apt/lists/*
 
+# 非rootユーザー作成（PulseAudioはrootで起動しないため必須）
+RUN useradd -m -s /bin/bash botuser
+
 WORKDIR /app
 
-# Playwright と必要なPythonパッケージをインストール
-RUN pip3 install --no-cache-dir httpx tenacity && \
-    pip3 install --no-cache-dir playwright==1.44.0 && \
-    playwright install chromium && \
-    playwright install-deps chromium
+# Playwright と必要なPythonパッケージをインストール（rootで実行してシステム全体に展開）
+RUN pip3 install --no-cache-dir httpx tenacity azure-cognitiveservices-speech && \
+    pip3 install --no-cache-dir playwright==1.44.0
+
+# Playwright ブラウザを botuser の HOME にインストール
+RUN mkdir -p /home/botuser/.cache && \
+    chown -R botuser:botuser /home/botuser/.cache
+
+USER botuser
+RUN playwright install chromium
+USER root
+
+# Playwright ブラウザの依存ライブラリをシステムにインストール（要root）
+RUN playwright install-deps chromium
 
 # 既存bot_runnerスクリプトを共用（音声キャプチャ・文字起こし・アップロード）
 # ビルドコンテキスト = プロジェクトルート (tech0notta/)
@@ -37,6 +51,9 @@ COPY backend/app/browser_bot/teams_bot.py       /app/teams_bot.py
 COPY backend/app/browser_bot/entrypoint.sh      /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-RUN mkdir -p /app/recordings
+RUN mkdir -p /app/recordings && \
+    chown -R botuser:botuser /app
+
+USER botuser
 
 ENTRYPOINT ["/app/entrypoint.sh"]

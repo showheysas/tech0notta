@@ -14,9 +14,24 @@ pactl load-module module-null-sink sink_name=virtual_speaker sink_properties=dev
 pactl load-module module-null-sink sink_name=virtual_mic sink_properties=device.description="Virtual_Mic" 2>/dev/null || true
 pactl load-module module-virtual-source source_name=virtual_mic_source master=virtual_mic.monitor 2>/dev/null || true
 
-# デフォルトソースをZoomのスピーカー出力に設定
+# デフォルトシンクをvirtual_speakerに設定
+# ChromeがPulseAudioに音声を出力する際にvirtual_speakerに流れるようにする
+pactl set-default-sink virtual_speaker 2>/dev/null || true
+
+# デフォルトソースをvirtual_speaker.monitorに設定
 # Azure Speech SDKがuse_default_microphone=Trueで使用するため重要
 pactl set-default-source virtual_speaker.monitor 2>/dev/null || true
+
+# ALSA → PulseAudio ルーティング設定
+# Azure Speech SDK（ALSA経由）がPulseAudioのvirtual_speaker.monitorを使えるようにする
+cat > ~/.asoundrc << EOF
+pcm.!default {
+    type pulse
+}
+ctl.!default {
+    type pulse
+}
+EOF
 
 # Zoom用設定ファイル作成
 mkdir -p ~/.config/zoomus
