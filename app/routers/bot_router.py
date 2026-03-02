@@ -134,6 +134,19 @@ async def terminate_bot(session_id: str):
     )
 
 
+@router.get("/{session_id}/logs")
+async def get_bot_logs(session_id: str):
+    """
+    ACI コンテナのログを取得（デバッグ用）
+    """
+    session = bot_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="セッションが見つかりません")
+
+    logs = await bot_service.get_bot_logs(session_id)
+    return {"session_id": session_id, "container_id": session.container_id, "logs": logs}
+
+
 @router.get("/sessions", response_model=list[BotSessionResponse])
 async def get_active_sessions():
     """

@@ -468,6 +468,28 @@ class BotService:
         return True
 
 
+    async def get_bot_logs(self, session_id: str) -> str:
+        """ACI コンテナのログを取得"""
+        session = self._sessions.get(session_id)
+        if not session:
+            return "セッションが見つかりません"
+        if not session.container_id:
+            return "コンテナIDが未設定（起動前または起動失敗）"
+
+        try:
+            from app.config import settings
+            aci_client = self._get_aci_client()
+            logs = aci_client.containers.list_logs(
+                settings.AZURE_RESOURCE_GROUP,
+                session.container_id,
+                session.container_id,  # container name = container group name
+                tail=200,
+            )
+            return logs.content or "(ログなし)"
+        except Exception as e:
+            logger.error(f"ACI ログ取得エラー: {e}")
+            return f"ログ取得エラー: {e}"
+
     async def terminate_sessions_by_meeting_id(self, meeting_id: str) -> int:
         """
         会議IDに関連するアクティブなBotセッションを全て終了する

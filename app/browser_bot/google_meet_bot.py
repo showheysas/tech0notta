@@ -12,8 +12,20 @@ logger = logging.getLogger(__name__)
 
 # セレクタ定数（Google MeetのUI変更に追従するため適宜更新）
 SELECTORS = {
+    # ゲストとして続行ボタン（サインイン促進ダイアログ）
+    "guest_option": (
+        'button:has-text("Continue as a guest"), '
+        'button:has-text("ゲストとして続行"), '
+        'button:has-text("Continue without an account"), '
+        'button:has-text("アカウントなしで続行"), '
+        'button:has-text("Use without an account")'
+    ),
     # 名前入力フィールド（ゲスト参加時）
-    "name_input": 'input[placeholder="Your name"], input[aria-label="Your name"]',
+    "name_input": (
+        'input[placeholder="Your name"], '
+        'input[aria-label="Your name"], '
+        'input[placeholder="あなたの名前"]'
+    ),
     # 参加ボタン（待機室 or 直接参加）
     "join_button": (
         'button[jsname="Qx7uuf"], '
@@ -73,7 +85,11 @@ class GoogleMeetBot:
 
             try:
                 logger.info(f"🌐 Google Meet に移動: {self.meeting_url}")
-                page.goto(self.meeting_url, wait_until="networkidle", timeout=30000)
+                page.goto(self.meeting_url, wait_until="domcontentloaded", timeout=60000)
+                logger.info(f"📄 ページタイトル: {page.title()}")
+
+                # 「ゲストとして続行」ボタンがあればクリック
+                self._handle_guest_option(page)
 
                 # 「ゲストとして参加」または名前入力フィールドを待つ
                 logger.info("👤 ゲスト名を入力中...")
@@ -93,6 +109,17 @@ class GoogleMeetBot:
                 raise
             finally:
                 browser.close()
+
+    def _handle_guest_option(self, page):
+        """「ゲストとして続行」ボタンがあればクリック（サインイン促進画面をスキップ）"""
+        try:
+            btn = page.wait_for_selector(SELECTORS["guest_option"], timeout=8000)
+            if btn and btn.is_visible():
+                btn.click()
+                logger.info("👤 ゲストオプションを選択")
+                time.sleep(2)
+        except PlaywrightTimeoutError:
+            logger.info("ゲストオプションなし（既にゲスト画面 or ログイン済み）、スキップ")
 
     def _enter_name(self, page):
         """ゲスト名入力フィールドに Bot 名を入力"""
