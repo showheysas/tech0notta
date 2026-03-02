@@ -21,7 +21,9 @@ SELECTORS = {
         'button:has-text("Use without an account")'
     ),
     # 名前入力フィールド（ゲスト参加時）
+    # placeholder は言語設定により「名前」「Your name」等が変わる
     "name_input": (
+        'input[placeholder="名前"], '
         'input[placeholder="Your name"], '
         'input[aria-label="Your name"], '
         'input[placeholder="あなたの名前"]'
