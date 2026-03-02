@@ -5,14 +5,19 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, File, UploadFile, Form
+import uuid
+
+from fastapi import APIRouter, HTTPException, Query, File, UploadFile, Form, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.services.live_transcription_service import (
     live_transcription_service,
     TranscriptSegment,
 )
 from app.services.bot_service import bot_service
+from app.database import get_db
+from app.models.job import Job, JobStatus
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +367,55 @@ async def receive_audio(
     except Exception as e:
         logger.error(f"音声データ受信エラー: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/segments/{session_id}/finalize")
+async def finalize_session(session_id: str, db: Session = Depends(get_db)):
+    """
+    ライブセッションを終了し、文字起こしをJobレコードとしてDBに保存する
+
+    Args:
+        session_id: セッションID
+
+    Returns:
+        {"job_id": str, "segment_count": int}
+    """
+    session = live_transcription_service.get_session(session_id)
+
+    # セッションが既に消えていても空のJobは作る（再起動後など）
+    if session:
+        segments = session.segments
+        transcription_lines = [
+            f"[{seg.time} {seg.speaker}]: {seg.text}"
+            for seg in segments
+        ]
+        transcription_text = "\n".join(transcription_lines)
+        meeting_topic = session.meeting_topic
+        segment_count = len(segments)
+    else:
+        transcription_text = ""
+        meeting_topic = f"会議 {session_id[:8]}"
+        segment_count = 0
+
+    job_id = str(uuid.uuid4())
+    job = Job(
+        job_id=job_id,
+        filename=meeting_topic,
+        file_size=0,
+        blob_name=None,
+        blob_url=None,
+        status=JobStatus.TRANSCRIBED.value,
+        transcription=transcription_text,
+    )
+    db.add(job)
+    db.commit()
+
+    logger.info(
+        f"✅ ライブセッション確定: session_id={session_id}, "
+        f"job_id={job_id}, segment_count={segment_count}"
+    )
+
+    return {"job_id": job_id, "segment_count": segment_count}
 
 
 @router.get("/health")
