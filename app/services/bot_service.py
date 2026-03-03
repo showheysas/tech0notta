@@ -224,8 +224,8 @@ class BotService:
             # スロット割り当て（Bot ごとにユニークな Xvfb display 番号を確保）
             slot = self._allocate_slot(session.id)
             display_num = 99 + slot
-            pulse_path = f"/tmp/pulse-{session.id}"
-            os.makedirs(pulse_path, exist_ok=True)
+            # PulseAudio はデフォルトのランタイムパスを使用
+            # （カスタムパスを指定すると pulseaudio --start が作成するソケットと不一致になる）
 
             # フェイクメディアファイルのパスを解決（/app/ シンボリックリンクに依存しない）
             _fake_media_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fake_media")
@@ -254,8 +254,6 @@ class BotService:
             env = dict(os.environ)
             env.update({
                 "DISPLAY": f":{display_num}",
-                "PULSE_RUNTIME_PATH": pulse_path,
-                "PULSE_SERVER": f"unix:{pulse_path}/native",
                 "PLATFORM": session.platform.value,
                 "MEETING_URL": session.meeting_url or session.meeting_id,
                 "MEETING_ID": session.meeting_id,
@@ -294,7 +292,7 @@ class BotService:
             )
             await asyncio.sleep(1)  # Xvfb の初期化を待つ
 
-            # PulseAudio セットアップ（セッション固有のサーバーを起動）
+            # PulseAudio セットアップ（デフォルトのランタイムパスを使用）
             import shutil as _shutil
             if _shutil.which("pulseaudio"):
                 pa_cmds = [
@@ -307,21 +305,25 @@ class BotService:
                 for cmd in pa_cmds:
                     try:
                         proc = await asyncio.create_subprocess_exec(
-                            *cmd, env=env,
-                            stdout=asyncio.subprocess.DEVNULL,
-                            stderr=asyncio.subprocess.DEVNULL,
+                            *cmd,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
                         )
-                        await proc.wait()
+                        stdout, stderr = await proc.communicate()
+                        if proc.returncode != 0:
+                            logger.warning(f"PulseAudio コマンド失敗 ({' '.join(cmd)}): rc={proc.returncode}, stderr={stderr.decode().strip()}")
+                        else:
+                            logger.info(f"PulseAudio: {' '.join(cmd[:2])} OK")
                     except Exception as e:
-                        logger.warning(f"PulseAudio コマンド失敗 ({' '.join(cmd[:2])}): {e}")
-                # ALSA→PulseAudio ルーティング設定
+                        logger.warning(f"PulseAudio コマンド例外 ({' '.join(cmd[:2])}): {e}")
+                # ALSA→PulseAudio ルーティング設定（Speech SDKがALSA経由でPulseAudioに到達するため）
                 asoundrc = os.path.expanduser("~/.asoundrc")
-                if not os.path.exists(asoundrc):
-                    try:
-                        with open(asoundrc, "w") as f:
-                            f.write("pcm.!default {\n    type pulse\n}\nctl.!default {\n    type pulse\n}\n")
-                    except Exception:
-                        pass
+                try:
+                    with open(asoundrc, "w") as f:
+                        f.write("pcm.!default {\n    type pulse\n}\nctl.!default {\n    type pulse\n}\n")
+                    logger.info("ALSA→PulseAudio ルーティング設定完了 (~/.asoundrc)")
+                except Exception as e:
+                    logger.warning(f"~/.asoundrc 書き込み失敗: {e}")
                 logger.info("PulseAudio セットアップ完了")
             else:
                 logger.warning("PulseAudio 未インストール（リアルタイム文字起こしは利用不可）")
