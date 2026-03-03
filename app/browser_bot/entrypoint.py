@@ -111,6 +111,7 @@ def main():
 
     backend_url = os.environ.get('BACKEND_URL', 'http://host.docker.internal:8000')
 
+    error_message = None
     try:
         if platform == 'google_meet':
             from google_meet_bot import GoogleMeetBot
@@ -127,13 +128,22 @@ def main():
         else:
             logger.error(f"❌ 未対応のプラットフォーム: {platform}")
             sys.exit(1)
+    except Exception as e:
+        import traceback
+        error_message = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        logger.error(f"❌ Bot実行エラー: {error_message}")
     finally:
         logger.info("🛑 クリーンアップ開始...")
 
-        # App Service に会議終了を通知（フロントエンドのステータスポーリングが自動終了フローを開始する）
+        # App Service に会議終了を通知（エラー情報も含める）
         try:
             import httpx
-            httpx.post(f"{backend_url}/api/bot/{session_id}/complete", timeout=10.0)
+            payload = {"error_message": error_message} if error_message else {}
+            httpx.post(
+                f"{backend_url}/api/bot/{session_id}/complete",
+                json=payload,
+                timeout=10.0,
+            )
             logger.info("✅ App Service に会議終了を通知しました")
         except Exception as e:
             logger.warning(f"会議終了通知失敗（処理は継続）: {e}")

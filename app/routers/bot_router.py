@@ -136,18 +136,28 @@ async def terminate_bot(session_id: str):
     )
 
 
+class CompleteBotRequest(BaseModel):
+    """Bot終了通知リクエスト（ACAコンテナから呼ばれる）"""
+    error_message: Optional[str] = None
+
+
 @router.post("/{session_id}/complete")
-async def complete_bot_session(session_id: str):
+async def complete_bot_session(session_id: str, request: CompleteBotRequest = None):
     """
-    ACIコンテナが会議から自然退出したときに呼び出す。
-    ステータスをCOMPLETEDに更新し、フロントエンドの自動終了フローを起動させる。
+    ACAコンテナが会議から退出（正常/異常）したときに呼び出す。
+    ステータスをCOMPLETED/ERRORに更新し、フロントエンドの自動終了フローを起動させる。
     """
     session = bot_service.get_session(session_id)
     if session and session.status not in (BotStatus.COMPLETED, BotStatus.ERROR):
-        session.status = BotStatus.COMPLETED
+        if request and request.error_message:
+            session.status = BotStatus.ERROR
+            session.error_message = request.error_message
+            logger.error(f"❌ Botエラー終了: session_id={session_id}, error={request.error_message[:200]}")
+        else:
+            session.status = BotStatus.COMPLETED
+            logger.info(f"✅ Bot自然終了を記録: session_id={session_id}")
         session.updated_at = datetime.utcnow()
-        logger.info(f"✅ Bot自然終了を記録: session_id={session_id}")
-    return {"success": True, "message": "状態をCOMPLETEDに更新しました"}
+    return {"success": True, "message": "状態を更新しました"}
 
 
 @router.get("/{session_id}/logs")
