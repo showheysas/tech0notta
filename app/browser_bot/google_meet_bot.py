@@ -19,15 +19,17 @@ SELECTORS = {
         'button:has-text("ゲストとして続行"), '
         'button:has-text("Continue without an account"), '
         'button:has-text("アカウントなしで続行"), '
-        'button:has-text("Use without an account")'
+        'button:has-text("Use without an account"), '
+        'button:has-text("Use Meet without an account")'
     ),
     # 名前入力フィールド（ゲスト参加時）
-    # placeholder は言語設定により「名前」「Your name」等が変わる
     "name_input": (
         'input[placeholder="名前"], '
         'input[placeholder="Your name"], '
         'input[aria-label="Your name"], '
-        'input[placeholder="あなたの名前"]'
+        'input[placeholder="あなたの名前"], '
+        'input[type="text"][aria-label*="name" i], '
+        'input[type="text"][data-placeholder*="name" i]'
     ),
     # 参加ボタン（待機室 or 直接参加）
     "join_button": (
@@ -36,17 +38,24 @@ SELECTORS = {
         'button:has-text("Ask to join"), '
         'button:has-text("Join now"), '
         'button:has-text("今すぐ参加"), '
-        'button:has-text("参加をリクエスト")'
+        'button:has-text("参加をリクエスト"), '
+        'button:has-text("参加"), '
+        'button[aria-label*="join" i], '
+        'button[aria-label*="参加"]'
     ),
     # マイクオフボタン（参加前プレビュー画面）
     "mic_off": (
         'button[aria-label="Turn off microphone"], '
-        'button[aria-label="マイクをオフにする"]'
+        'button[aria-label="マイクをオフにする"], '
+        'button[aria-label*="microphone" i][data-is-muted="false"], '
+        'button[aria-label*="マイク"][data-is-muted="false"]'
     ),
     # カメラオフボタン（参加前プレビュー画面）
     "camera_off": (
         'button[aria-label="Turn off camera"], '
-        'button[aria-label="カメラをオフにする"]'
+        'button[aria-label="カメラをオフにする"], '
+        'button[aria-label*="camera" i][data-is-muted="false"], '
+        'button[aria-label*="カメラ"][data-is-muted="false"]'
     ),
     # 会議中のマイクONボタン（クリックするとミュートになる）
     "mic_on_in_meeting": (
@@ -61,7 +70,9 @@ SELECTORS = {
         'text="You\'ve left the call", '
         'text="This call has ended", '
         'text="通話が終了しました", '
-        'text="退出しました"'
+        'text="退出しました", '
+        'text="You left the meeting", '
+        'text="Return to home screen"'
     ),
 }
 
@@ -71,6 +82,38 @@ class GoogleMeetBot:
         self.meeting_url = meeting_url
         self.bot_name = bot_name
         self.timeout_sec = timeout_min * 60
+
+    def _dump_page_state(self, page, label: str):
+        """ページの状態をログに出力（デバッグ用）"""
+        try:
+            title = page.title()
+            url = page.url
+            # ページ内の主要なテキストを取得
+            body_text = page.evaluate("() => document.body ? document.body.innerText.substring(0, 1500) : 'no body'")
+            logger.info(f"📸 [{label}] URL={url}, Title={title}")
+            logger.info(f"📸 [{label}] Body text (先頭1500文字):\n{body_text}")
+            # ボタン一覧
+            buttons = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('button')).slice(0, 20).map(b => ({
+                    text: b.innerText.substring(0, 50),
+                    ariaLabel: b.getAttribute('aria-label') || '',
+                    jsname: b.getAttribute('jsname') || '',
+                    visible: b.offsetParent !== null
+                }));
+            }""")
+            logger.info(f"📸 [{label}] Buttons ({len(buttons)}): {buttons}")
+            # input一覧
+            inputs = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('input')).slice(0, 10).map(i => ({
+                    type: i.type,
+                    placeholder: i.placeholder || '',
+                    ariaLabel: i.getAttribute('aria-label') || '',
+                    visible: i.offsetParent !== null
+                }));
+            }""")
+            logger.info(f"📸 [{label}] Inputs ({len(inputs)}): {inputs}")
+        except Exception as e:
+            logger.warning(f"📸 [{label}] ページ状態取得失敗: {e}")
 
     def run(self):
         fake_video = os.environ.get("FAKE_VIDEO_PATH", "/app/black.y4m")
@@ -93,7 +136,7 @@ class GoogleMeetBot:
                 user_agent=(
                     "Mozilla/5.0 (X11; Linux x86_64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
+                    "Chrome/131.0.0.0 Safari/537.36"
                 )
             )
             page = context.new_page()
@@ -115,8 +158,11 @@ class GoogleMeetBot:
 
             try:
                 logger.info(f"🌐 Google Meet に移動: {self.meeting_url}")
-                page.goto(self.meeting_url, wait_until="domcontentloaded", timeout=60000)
+                page.goto(self.meeting_url, wait_until="networkidle", timeout=60000)
                 logger.info(f"📄 ページタイトル: {page.title()}")
+
+                # ページ初期状態をダンプ（デバッグ）
+                self._dump_page_state(page, "初期ロード後")
 
                 # 「ゲストとして続行」ボタンがあればクリック
                 self._handle_guest_option(page)
@@ -124,6 +170,9 @@ class GoogleMeetBot:
                 # 「ゲストとして参加」または名前入力フィールドを待つ
                 logger.info("👤 ゲスト名を入力中...")
                 self._enter_name(page)
+
+                # ページ状態をダンプ（名前入力後）
+                self._dump_page_state(page, "名前入力後")
 
                 # マイク・カメラをオフに
                 self._disable_av(page)
@@ -138,6 +187,8 @@ class GoogleMeetBot:
                 self._wait_for_meeting_end(page)
 
             except Exception as e:
+                # エラー時もページ状態をダンプ
+                self._dump_page_state(page, "エラー発生時")
                 logger.error(f"Google Meet Bot エラー: {e}")
                 raise
             finally:
@@ -146,10 +197,11 @@ class GoogleMeetBot:
     def _handle_guest_option(self, page):
         """「ゲストとして続行」ボタンがあればクリック（サインイン促進画面をスキップ）"""
         try:
-            btn = page.wait_for_selector(SELECTORS["guest_option"], timeout=8000)
+            btn = page.wait_for_selector(SELECTORS["guest_option"], timeout=10000)
             if btn and btn.is_visible():
                 btn.click()
                 logger.info("👤 ゲストオプションを選択")
+                page.wait_for_load_state("networkidle", timeout=10000)
                 time.sleep(2)
         except PlaywrightTimeoutError:
             logger.info("ゲストオプションなし（既にゲスト画面 or ログイン済み）、スキップ")
@@ -164,7 +216,7 @@ class GoogleMeetBot:
                 name_field.fill(self.bot_name)
                 logger.info(f"✏️ 名前入力完了: {self.bot_name}")
         except PlaywrightTimeoutError:
-            logger.info("名前入力フィールドなし（ログイン済みアカウントの可能性）、スキップ")
+            logger.warning("⚠️ 名前入力フィールドなし — ページ状態を確認してください")
 
     def _disable_av(self, page):
         """マイク・カメラをオフにする（既にオフなら無視）"""
