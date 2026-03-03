@@ -4,14 +4,14 @@ Zoom / Google Meet / Microsoft Teams へのBot派遣を管理する
 """
 import asyncio
 import logging
+import os
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from app.zoom_config import zoom_config
-from app.services.sdk_jwt_service import sdk_jwt_service
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,8 @@ class BotSession:
     error_message: Optional[str] = None
     platform: BotPlatform = BotPlatform.ZOOM
     meeting_url: Optional[str] = None
+    process: Optional[Any] = None       # asyncio.subprocess.Process (bot)
+    xvfb_process: Optional[Any] = None  # asyncio.subprocess.Process (Xvfb)
 
     def to_dict(self) -> dict:
         return {
@@ -68,6 +70,23 @@ class BotService:
     def __init__(self):
         # インメモリでセッション管理（本番ではDBに保存）
         self._sessions: Dict[str, BotSession] = {}
+        # Xvfb ディスプレイ番号スロット管理（同時複数Bot対応）
+        self._slots: Dict[int, str] = {}  # slot_index → session_id
+
+    def _allocate_slot(self, session_id: str) -> int:
+        """ユニークな Xvfb ディスプレイスロットを確保して返す"""
+        for i in range(10):
+            if i not in self._slots:
+                self._slots[i] = session_id
+                return i
+        raise RuntimeError("同時起動可能なBot数の上限（10）に達しました")
+
+    def _release_slot(self, session_id: str) -> None:
+        """スロットを解放する"""
+        for slot, sid in list(self._slots.items()):
+            if sid == session_id:
+                del self._slots[slot]
+                return
 
     def _parse_meeting_url(self, url_or_id: str) -> tuple[str, Optional[str]]:
         """
@@ -113,15 +132,6 @@ class BotService:
             return BotPlatform.TEAMS
         return BotPlatform.ZOOM  # zoom.us / 数字IDはZoom
 
-    def _get_aci_client(self):
-        """ACI クライアントを返す（DefaultAzureCredential で Managed Identity 対応）"""
-        from azure.identity import DefaultAzureCredential
-        from azure.mgmt.containerinstance import ContainerInstanceManagementClient
-        from app.config import settings
-
-        credential = DefaultAzureCredential()
-        return ContainerInstanceManagementClient(credential, settings.AZURE_SUBSCRIPTION_ID)
-
     async def dispatch_bot(
         self,
         meeting_id: str,
@@ -147,8 +157,6 @@ class BotService:
 
         # Zoom / Google Meet / Teams すべてブラウザBot経由でURLをそのまま使用
         clean_meeting_id = meeting_url or meeting_id
-        final_password = None
-        jwt_token = None
 
         if not clean_meeting_id:
             raise ValueError("有効な会議URLを指定してください")
@@ -160,7 +168,7 @@ class BotService:
         session = BotSession(
             id=session_id,
             meeting_id=clean_meeting_id,
-            meeting_password=final_password,
+            meeting_password=None,
             status=BotStatus.PENDING,
             created_at=now,
             updated_at=now,
@@ -176,114 +184,14 @@ class BotService:
         )
 
         # Bot Runnerを起動（非同期）
-        asyncio.create_task(self._run_bot(session, jwt_token))
+        asyncio.create_task(self._run_browser_bot(session))
 
         return session
 
-    async def _run_bot(self, session: BotSession, jwt_token: Optional[str]) -> None:
-        """プラットフォームに応じてBot Runnerコンテナを起動"""
-        # ZoomはブラウザBot（Playwright）経由で参加（C++ SDK廃止）
-        await self._run_browser_bot(session)
-
-    async def _run_zoom_bot(self, session: BotSession, jwt_token: Optional[str]) -> None:
-        """
-        Zoom Bot Runner を ACI コンテナグループとして起動して会議に参加
-        """
-        try:
-            session.status = BotStatus.JOINING
-            session.updated_at = datetime.utcnow()
-
-            logger.info(
-                f"🚀 Zoom Bot起動開始: session_id={session.id}, "
-                f"meeting_id={session.meeting_id}"
-            )
-
-            # ライブ文字起こしサービスにセッションを作成
-            from app.services.live_transcription_service import live_transcription_service
-            live_transcription_service.create_session(
-                session_id=session.id,
-                meeting_id=session.meeting_id,
-                meeting_topic=f"会議 {session.meeting_id}"
-            )
-
-            from app.config import settings
-            from azure.mgmt.containerinstance.models import (
-                ContainerGroup,
-                Container,
-                ContainerGroupRestartPolicy,
-                EnvironmentVariable,
-                ImageRegistryCredential,
-                OperatingSystemTypes,
-                ResourceRequests,
-                ResourceRequirements,
-            )
-
-            container_group_name = f"bot-{session.id[:8]}"
-            image = f"{settings.ACR_SERVER}/tech-notta-bot:latest"
-            backend_url = settings.BACKEND_URL
-            azure_speech_key = settings.AZURE_SPEECH_KEY or ""
-            azure_speech_region = settings.AZURE_SPEECH_REGION or "japaneast"
-
-            env_vars = [
-                EnvironmentVariable(name="MEETING_NUMBER", value=session.meeting_id),
-                EnvironmentVariable(name="JWT_TOKEN", secure_value=jwt_token or ""),
-                EnvironmentVariable(name="PASSWORD", value=session.meeting_password or ""),
-                EnvironmentVariable(name="BOT_NAME", value=zoom_config.bot_display_name),
-                EnvironmentVariable(name="BACKEND_URL", value=backend_url),
-                EnvironmentVariable(name="SESSION_ID", value=session.id),
-                EnvironmentVariable(name="AZURE_SPEECH_KEY", secure_value=azure_speech_key),
-                EnvironmentVariable(name="AZURE_SPEECH_REGION", value=azure_speech_region),
-            ]
-
-            container = Container(
-                name=container_group_name,
-                image=image,
-                resources=ResourceRequirements(
-                    requests=ResourceRequests(cpu=1.0, memory_in_gb=1.5)
-                ),
-                environment_variables=env_vars,
-            )
-
-            registry_credential = ImageRegistryCredential(
-                server=settings.ACR_SERVER,
-                username=settings.ACR_USERNAME,
-                password=settings.ACR_PASSWORD,
-            )
-
-            container_group = ContainerGroup(
-                location=settings.ACI_LOCATION,
-                containers=[container],
-                os_type=OperatingSystemTypes.LINUX,
-                restart_policy=ContainerGroupRestartPolicy.NEVER,
-                image_registry_credentials=[registry_credential],
-            )
-
-            aci_client = self._get_aci_client()
-            poller = aci_client.container_groups.begin_create_or_update(
-                settings.AZURE_RESOURCE_GROUP,
-                container_group_name,
-                container_group,
-            )
-            # ACI の作成完了を待たずに IN_MEETING に遷移（非同期起動）
-            await asyncio.get_event_loop().run_in_executor(None, poller.wait)
-
-            session.container_id = container_group_name
-            session.status = BotStatus.IN_MEETING
-            session.updated_at = datetime.utcnow()
-            logger.info(
-                f"✅ Zoom Bot参加完了 (ContainerGroup: {container_group_name}): "
-                f"session_id={session.id}"
-            )
-
-        except Exception as e:
-            logger.error(f"Zoom Bot起動エラー: {e}")
-            session.status = BotStatus.ERROR
-            session.error_message = str(e)
-            session.updated_at = datetime.utcnow()
-
     async def _run_browser_bot(self, session: BotSession) -> None:
         """
-        ブラウザBot（Google Meet / Teams）を ACI コンテナグループとして起動して会議に参加
+        ブラウザBotを App Service 内の subprocess として起動して会議に参加。
+        ACI コールドスタート（60〜90秒）を排除し、1〜3秒で参加開始できる。
         """
         try:
             session.status = BotStatus.JOINING
@@ -305,22 +213,6 @@ class BotService:
             from app.config import settings
             from app.google_meet_config import google_meet_config
             from app.teams_config import teams_config
-            from azure.mgmt.containerinstance.models import (
-                ContainerGroup,
-                Container,
-                ContainerGroupRestartPolicy,
-                EnvironmentVariable,
-                ImageRegistryCredential,
-                OperatingSystemTypes,
-                ResourceRequests,
-                ResourceRequirements,
-            )
-
-            container_group_name = f"bot-{session.id[:8]}"
-            image = f"{settings.ACR_SERVER}/tech-notta-browser-bot:latest"
-            backend_url = settings.BACKEND_URL
-            azure_speech_key = settings.AZURE_SPEECH_KEY or ""
-            azure_speech_region = settings.AZURE_SPEECH_REGION or "japaneast"
 
             if session.platform == BotPlatform.GOOGLE_MEET:
                 bot_name = google_meet_config.bot_display_name
@@ -329,61 +221,94 @@ class BotService:
             else:
                 bot_name = teams_config.bot_display_name
 
-            env_vars = [
-                EnvironmentVariable(name="PLATFORM", value=session.platform.value),
-                EnvironmentVariable(name="MEETING_URL", value=session.meeting_url or session.meeting_id),
-                EnvironmentVariable(name="MEETING_ID", value=session.meeting_id),
-                EnvironmentVariable(name="BOT_NAME", value=bot_name),
-                EnvironmentVariable(name="BACKEND_URL", value=backend_url),
-                EnvironmentVariable(name="SESSION_ID", value=session.id),
-                EnvironmentVariable(name="AZURE_SPEECH_KEY", secure_value=azure_speech_key),
-                EnvironmentVariable(name="AZURE_SPEECH_REGION", value=azure_speech_region),
-            ]
+            # スロット割り当て（Bot ごとにユニークな Xvfb display 番号を確保）
+            slot = self._allocate_slot(session.id)
+            display_num = 99 + slot
+            pulse_path = f"/tmp/pulse-{session.id}"
+            os.makedirs(pulse_path, exist_ok=True)
 
-            container = Container(
-                name=container_group_name,
-                image=image,
-                resources=ResourceRequirements(
-                    requests=ResourceRequests(cpu=1.0, memory_in_gb=2.0)
-                ),
-                environment_variables=env_vars,
+            env = dict(os.environ)
+            env.update({
+                "DISPLAY": f":{display_num}",
+                "PULSE_RUNTIME_PATH": pulse_path,
+                "PULSE_SERVER": f"unix:{pulse_path}/native",
+                "PLATFORM": session.platform.value,
+                "MEETING_URL": session.meeting_url or session.meeting_id,
+                "MEETING_ID": session.meeting_id,
+                "BOT_NAME": bot_name,
+                "BACKEND_URL": settings.BACKEND_URL,
+                "SESSION_ID": session.id,
+                "AZURE_SPEECH_KEY": settings.AZURE_SPEECH_KEY or "",
+                "AZURE_SPEECH_REGION": settings.AZURE_SPEECH_REGION or "japaneast",
+            })
+
+            # Xvfb 起動前にロックファイルをクリーンアップ（App Service 再起動後の残留ロック対策）
+            for stale in [f"/tmp/.X{display_num}-lock", f"/tmp/.X11-unix/X{display_num}"]:
+                try:
+                    os.remove(stale)
+                except FileNotFoundError:
+                    pass
+
+            # Xvfb 起動（仮想ディスプレイ）
+            xvfb = await asyncio.create_subprocess_exec(
+                "Xvfb", f":{display_num}", "-screen", "0", "1280x720x24",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.sleep(1)  # Xvfb の初期化を待つ
+
+            # ブラウザBot プロセス起動
+            process = await asyncio.create_subprocess_exec(
+                "python3", "/app/app/browser_bot/entrypoint.py",
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
             )
 
-            registry_credential = ImageRegistryCredential(
-                server=settings.ACR_SERVER,
-                username=settings.ACR_USERNAME,
-                password=settings.ACR_PASSWORD,
-            )
-
-            container_group = ContainerGroup(
-                location=settings.ACI_LOCATION,
-                containers=[container],
-                os_type=OperatingSystemTypes.LINUX,
-                restart_policy=ContainerGroupRestartPolicy.NEVER,
-                image_registry_credentials=[registry_credential],
-            )
-
-            aci_client = self._get_aci_client()
-            poller = aci_client.container_groups.begin_create_or_update(
-                settings.AZURE_RESOURCE_GROUP,
-                container_group_name,
-                container_group,
-            )
-            await asyncio.get_event_loop().run_in_executor(None, poller.wait)
-
-            session.container_id = container_group_name
+            session.process = process
+            session.xvfb_process = xvfb
             session.status = BotStatus.IN_MEETING
             session.updated_at = datetime.utcnow()
+
             logger.info(
-                f"✅ ブラウザBot参加完了 (ContainerGroup: {container_group_name}): "
-                f"session_id={session.id}"
+                f"✅ ブラウザBot参加完了 (PID: {process.pid}): session_id={session.id}"
             )
+
+            # subprocess の出力をログに転送（バッファ詰まり防止）
+            asyncio.create_task(self._log_subprocess_output(session))
+            # subprocess の終了を監視してステータスを更新
+            asyncio.create_task(self._monitor_process(session))
 
         except Exception as e:
             logger.error(f"ブラウザBot起動エラー: {e}")
             session.status = BotStatus.ERROR
             session.error_message = str(e)
             session.updated_at = datetime.utcnow()
+            self._release_slot(session.id)
+
+    async def _log_subprocess_output(self, session: BotSession) -> None:
+        """subprocess の stdout をロガーに転送する（パイプバッファ詰まり防止）"""
+        if not session.process or not session.process.stdout:
+            return
+        async for line in session.process.stdout:
+            logger.info(f"[Bot {session.id[:8]}] {line.decode().rstrip()}")
+
+    async def _monitor_process(self, session: BotSession) -> None:
+        """ブラウザBotプロセスの終了を監視し、ステータスを更新する"""
+        if not session.process:
+            return
+        returncode = await session.process.wait()
+        logger.info(
+            f"ブラウザBotプロセス終了: session_id={session.id}, returncode={returncode}"
+        )
+        if session.status not in (BotStatus.COMPLETED, BotStatus.ERROR, BotStatus.LEAVING):
+            if returncode == 0:
+                session.status = BotStatus.COMPLETED
+            else:
+                session.status = BotStatus.ERROR
+                session.error_message = f"プロセス終了コード: {returncode}"
+            session.updated_at = datetime.utcnow()
+        self._release_slot(session.id)
 
     def get_session(self, session_id: str) -> Optional[BotSession]:
         """セッション取得"""
@@ -409,7 +334,7 @@ class BotService:
 
     async def terminate_bot(self, session_id: str) -> bool:
         """
-        Botを会議から退出させる（ACI コンテナグループを削除）
+        Botを会議から退出させる（subprocess を終了）
 
         Args:
             session_id: セッションID
@@ -427,18 +352,24 @@ class BotService:
 
         logger.info(f"🛑 Bot退出開始: session_id={session_id}")
 
-        # ACI コンテナグループ削除
-        if session.container_id:
+        # ブラウザBot プロセス終了
+        if session.process and session.process.returncode is None:
             try:
-                from app.config import settings
-                aci_client = self._get_aci_client()
-                poller = aci_client.container_groups.begin_delete(
-                    settings.AZURE_RESOURCE_GROUP,
-                    session.container_id,
-                )
-                await asyncio.get_event_loop().run_in_executor(None, poller.wait)
+                session.process.terminate()
+                await asyncio.wait_for(session.process.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                session.process.kill()
             except Exception as e:
-                logger.error(f"ACIコンテナグループ削除エラー: {e}")
+                logger.error(f"ブラウザBotプロセス終了エラー: {e}")
+
+        # Xvfb プロセス終了
+        if session.xvfb_process and session.xvfb_process.returncode is None:
+            try:
+                session.xvfb_process.terminate()
+            except Exception as e:
+                logger.error(f"Xvfbプロセス終了エラー: {e}")
+
+        self._release_slot(session_id)
 
         session.status = BotStatus.COMPLETED
         session.updated_at = datetime.utcnow()
@@ -446,28 +377,14 @@ class BotService:
         logger.info(f"✅ Bot退出完了: session_id={session_id}")
         return True
 
-
     async def get_bot_logs(self, session_id: str) -> str:
-        """ACI コンテナのログを取得"""
+        """プロセスの状態を返す（subprocess方式ではリアルタイムログはロガーに出力済み）"""
         session = self._sessions.get(session_id)
         if not session:
             return "セッションが見つかりません"
-        if not session.container_id:
-            return "コンテナIDが未設定（起動前または起動失敗）"
-
-        try:
-            from app.config import settings
-            aci_client = self._get_aci_client()
-            logs = aci_client.containers.list_logs(
-                settings.AZURE_RESOURCE_GROUP,
-                session.container_id,
-                session.container_id,  # container name = container group name
-                tail=200,
-            )
-            return logs.content or "(ログなし)"
-        except Exception as e:
-            logger.error(f"ACI ログ取得エラー: {e}")
-            return f"ログ取得エラー: {e}"
+        if not session.process:
+            return "プロセスが起動していません"
+        return f"プロセスPID: {session.process.pid}, ステータス: {session.status.value}"
 
     async def terminate_sessions_by_meeting_id(self, meeting_id: str) -> int:
         """

@@ -34,3 +34,6 @@ websockets>=13.0
 
 # Audio/Video Processing
 ffmpeg-python==0.2.0
+
+# Browser Bot (subprocess 方式でブラウザBot を起動するために必要)
+playwright==1.44.0
