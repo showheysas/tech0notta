@@ -271,12 +271,18 @@ class BotService:
             # __file__ から相対パスで entrypoint.py を特定（/app シンボリックリンクに依存しない）
             _this_dir = os.path.dirname(os.path.abspath(__file__))          # app/services/
             _app_dir = os.path.dirname(_this_dir)                           # app/
-            entrypoint_path = os.path.join(_app_dir, "browser_bot", "entrypoint.py")
-            logger.info(f"entrypoint_path={entrypoint_path}")
+            _browser_bot_dir = os.path.join(_app_dir, "browser_bot")
+            entrypoint_path = os.path.join(_browser_bot_dir, "entrypoint.py")
+            logger.info(f"entrypoint_path={entrypoint_path}, cwd={_browser_bot_dir}")
+
+            # browser_bot ディレクトリを PYTHONPATH に追加（bare import 解決用）
+            existing_pypath = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = f"{_browser_bot_dir}:{existing_pypath}" if existing_pypath else _browser_bot_dir
 
             process = await asyncio.create_subprocess_exec(
                 "python3", entrypoint_path,
                 env=env,
+                cwd=_browser_bot_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
