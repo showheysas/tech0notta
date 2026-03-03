@@ -74,7 +74,7 @@ class BotService:
         """Azure Container Apps API クライアントを取得（遅延初期化）"""
         if self._aca_client is None:
             from azure.identity import DefaultAzureCredential
-            from azure.mgmt.containerapp import ContainerAppsAPIClient
+            from azure.mgmt.appcontainers import ContainerAppsAPIClient
             from app.config import settings
 
             credential = DefaultAzureCredential()
@@ -218,24 +218,24 @@ class BotService:
                 bot_name = teams_config.bot_display_name
 
             # ACA Job execution の環境変数
-            from azure.mgmt.containerapp.models import (
+            from azure.mgmt.appcontainers.models import (
                 JobExecutionTemplate,
                 JobExecutionContainer,
                 ContainerResources,
+                EnvironmentVar,
             )
 
             env_vars = [
-                {"name": "PLATFORM", "value": session.platform.value},
-                {"name": "MEETING_URL", "value": session.meeting_url or session.meeting_id},
-                {"name": "MEETING_ID", "value": session.meeting_id},
-                {"name": "BOT_NAME", "value": bot_name},
-                {"name": "BACKEND_URL", "value": settings.BACKEND_URL},
-                {"name": "SESSION_ID", "value": session.id},
-                {"name": "AZURE_SPEECH_REGION", "value": settings.AZURE_SPEECH_REGION or "japaneast"},
+                EnvironmentVar(name="PLATFORM", value=session.platform.value),
+                EnvironmentVar(name="MEETING_URL", value=session.meeting_url or session.meeting_id),
+                EnvironmentVar(name="MEETING_ID", value=session.meeting_id),
+                EnvironmentVar(name="BOT_NAME", value=bot_name),
+                EnvironmentVar(name="BACKEND_URL", value=settings.BACKEND_URL),
+                EnvironmentVar(name="SESSION_ID", value=session.id),
+                EnvironmentVar(name="AZURE_SPEECH_REGION", value=settings.AZURE_SPEECH_REGION or "japaneast"),
+                # AZURE_SPEECH_KEY は ACA Job の secret として設定済み（secret_ref で参照）
+                EnvironmentVar(name="AZURE_SPEECH_KEY", secret_ref="azure-speech-key"),
             ]
-
-            # AZURE_SPEECH_KEY は ACA Job の secret として設定済み（secretRef で参照）
-            env_vars.append({"name": "AZURE_SPEECH_KEY", "secretRef": "azure-speech-key"})
 
             template = JobExecutionTemplate(
                 containers=[

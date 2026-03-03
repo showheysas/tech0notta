@@ -15,7 +15,7 @@ alembic==1.14.0
 azure-storage-blob==12.23.1
 azure-cognitiveservices-speech==1.41.1
 openai==1.55.3
-azure-mgmt-containerapp>=2.0.0
+azure-mgmt-appcontainers>=3.0.0
 azure-identity>=1.15.0
 
 # Notion
