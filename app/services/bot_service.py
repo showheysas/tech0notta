@@ -264,6 +264,7 @@ class BotService:
                 "AZURE_SPEECH_REGION": settings.AZURE_SPEECH_REGION or "japaneast",
                 "FAKE_VIDEO_PATH": _black_y4m,
                 "FAKE_AUDIO_PATH": _silent_wav,
+                "PLAYWRIGHT_BROWSERS_PATH": os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/home/playwright"),
             })
 
             # Xvfb がインストール済みか確認（apt-get で140+パッケージのインストールに2-3分かかる）

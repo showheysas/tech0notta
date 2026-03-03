@@ -141,24 +141,18 @@ class GoogleMeetBot:
             )
             page = context.new_page()
 
-            # ページコード実行前にgetUserMediaをオーバーライド
-            # --use-fake-device-for-media-stream が生成する440Hz sine wave を
-            # Google Meet に渡す前に無効化する（根本的なビープ音対策）
-            page.add_init_script("""
-                (() => {
-                    const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-                    navigator.mediaDevices.getUserMedia = async function(constraints) {
-                        // audio:false にして偽デバイスの440Hzトーンを送信しない
-                        // （fake deviceはビデオのみ使用、音声は取得しない）
-                        const c = constraints ? Object.assign({}, constraints, {audio: false}) : constraints;
-                        return await orig(c);
-                    };
-                })();
-            """)
+            # getUserMedia オーバーライドは削除
+            # --use-file-for-fake-audio-capture=silent.wav が既に無音を提供するため、
+            # audio:false にすると Google Meet が「マイク使用不可」と判断し
+            # 参加UIが表示されなくなる問題があった
 
             try:
                 logger.info(f"🌐 Google Meet に移動: {self.meeting_url}")
-                page.goto(self.meeting_url, wait_until="networkidle", timeout=60000)
+                # domcontentloaded を使用（Google Meet はSPAで永続WebSocket接続があるため
+                # networkidle には到達しない → タイムアウトする）
+                page.goto(self.meeting_url, wait_until="domcontentloaded", timeout=60000)
+                # SPA描画の完了を待つ
+                page.wait_for_load_state("load", timeout=30000)
                 logger.info(f"📄 ページタイトル: {page.title()}")
 
                 # ページ初期状態をダンプ（デバッグ）

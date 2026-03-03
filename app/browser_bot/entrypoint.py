@@ -82,9 +82,9 @@ def main():
         f"bot_name={bot_name}, session_id={session_id}"
     )
 
-    # PulseAudio設定
-    logger.info("🔊 PulseAudio設定中...")
-    subprocess.run([SETUP_PULSEAUDIO], check=False)
+    # PulseAudio設定は bot_service.py が subprocess 起動前に実施済み
+    # ここで再度 setup-pulseaudio.sh を実行すると module-null-sink が二重ロードされるためスキップ
+    logger.info("🔊 PulseAudio設定: bot_service.py で設定済み（スキップ）")
 
     # リアルタイム文字起こし開始
     transcriber_process = start_realtime_transcription(session_id)
