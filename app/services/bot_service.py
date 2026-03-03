@@ -258,8 +258,14 @@ class BotService:
             await asyncio.sleep(1)  # Xvfb の初期化を待つ
 
             # ブラウザBot プロセス起動
+            # __file__ から相対パスで entrypoint.py を特定（/app シンボリックリンクに依存しない）
+            _this_dir = os.path.dirname(os.path.abspath(__file__))          # app/services/
+            _app_dir = os.path.dirname(_this_dir)                           # app/
+            entrypoint_path = os.path.join(_app_dir, "browser_bot", "entrypoint.py")
+            logger.info(f"entrypoint_path={entrypoint_path}")
+
             process = await asyncio.create_subprocess_exec(
-                "python3", "/app/app/browser_bot/entrypoint.py",
+                "python3", entrypoint_path,
                 env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
