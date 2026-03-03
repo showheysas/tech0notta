@@ -242,6 +242,16 @@ class BotService:
                 "AZURE_SPEECH_REGION": settings.AZURE_SPEECH_REGION or "japaneast",
             })
 
+            # Xvfb がインストール済みか確認（バックグラウンド apt-get がまだ完了していない場合がある）
+            import shutil
+            for _retry in range(30):  # 最大60秒待つ
+                if shutil.which("Xvfb"):
+                    break
+                logger.info(f"⏳ Xvfb がまだインストールされていません。待機中... ({_retry+1}/30)")
+                await asyncio.sleep(2)
+            else:
+                raise RuntimeError("Xvfb がインストールされていません。App Service を再起動してください。")
+
             # Xvfb 起動前にロックファイルをクリーンアップ（App Service 再起動後の残留ロック対策）
             for stale in [f"/tmp/.X{display_num}-lock", f"/tmp/.X11-unix/X{display_num}"]:
                 try:
