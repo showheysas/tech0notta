@@ -18,6 +18,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# スクリプトパス解決: bot_runner/ にある共有スクリプトを参照
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))        # browser_bot/
+_BOT_RUNNER_DIR = os.path.join(os.path.dirname(_SCRIPT_DIR), "bot_runner")  # bot_runner/
+SETUP_PULSEAUDIO = os.path.join(_BOT_RUNNER_DIR, "setup-pulseaudio.sh")
+REALTIME_TRANSCRIBER = os.path.join(_BOT_RUNNER_DIR, "realtime_transcriber.py")
+AUDIO_CAPTURE = os.path.join(_BOT_RUNNER_DIR, "audio_capture.sh")
+UPLOAD_WORKFLOW = os.path.join(_BOT_RUNNER_DIR, "upload_workflow.py")
+
 
 def start_realtime_transcription(session_id: str) -> subprocess.Popen | None:
     """リアルタイム文字起こしプロセスを起動"""
@@ -38,7 +46,7 @@ def start_realtime_transcription(session_id: str) -> subprocess.Popen | None:
     env['AZURE_SPEECH_REGION'] = speech_region
 
     process = subprocess.Popen(
-        [sys.executable, '/app/realtime_transcriber.py'],
+        [sys.executable, REALTIME_TRANSCRIBER],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT
@@ -76,7 +84,7 @@ def main():
 
     # PulseAudio設定
     logger.info("🔊 PulseAudio設定中...")
-    subprocess.run(["/app/setup-pulseaudio.sh"], check=False)
+    subprocess.run([SETUP_PULSEAUDIO], check=False)
 
     # リアルタイム文字起こし開始
     transcriber_process = start_realtime_transcription(session_id)
@@ -84,7 +92,7 @@ def main():
     # 音声キャプチャ開始
     logger.info("🎙️ 音声キャプチャを開始...")
     audio_capture_process = subprocess.Popen(
-        ['/app/audio_capture.sh'],
+        [AUDIO_CAPTURE],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT
     )
@@ -144,7 +152,7 @@ def main():
         logger.info("📤 自動アップロード & 議事録作成ワークフローを実行...")
         try:
             workflow_result = subprocess.run(
-                [sys.executable, '/app/upload_workflow.py'],
+                [sys.executable, UPLOAD_WORKFLOW],
                 capture_output=True,
                 text=True
             )
