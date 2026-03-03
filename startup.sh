@@ -4,8 +4,9 @@ set -euo pipefail
 WWWROOT=/home/site/wwwroot
 
 # /app シンボリックリンク作成（browser bot の絶対パス参照を解決するため）
-rm -f /app 2>/dev/null || true
-ln -sf "$WWWROOT" /app 2>/dev/null || echo "WARNING: Could not create /app symlink."
+# /app がディレクトリとして存在する場合も対応
+rm -rf /app 2>/dev/null || true
+ln -sfn "$WWWROOT" /app 2>/dev/null || echo "WARNING: Could not create /app symlink."
 
 # Bot スクリプトを entrypoint.py が期待する絶対パス (/app/*.py, /app/*.sh) にコピー
 for f in realtime_transcriber.py upload_workflow.py; do
