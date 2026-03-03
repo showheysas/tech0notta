@@ -293,6 +293,38 @@ class BotService:
             )
             await asyncio.sleep(1)  # Xvfb の初期化を待つ
 
+            # PulseAudio セットアップ（セッション固有のサーバーを起動）
+            import shutil as _shutil
+            if _shutil.which("pulseaudio"):
+                pa_cmds = [
+                    ["pulseaudio", "--start", "--exit-idle-time=-1"],
+                    ["pactl", "load-module", "module-null-sink", "sink_name=virtual_speaker",
+                     "sink_properties=device.description=Virtual_Speaker"],
+                    ["pactl", "set-default-sink", "virtual_speaker"],
+                    ["pactl", "set-default-source", "virtual_speaker.monitor"],
+                ]
+                for cmd in pa_cmds:
+                    try:
+                        proc = await asyncio.create_subprocess_exec(
+                            *cmd, env=env,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.DEVNULL,
+                        )
+                        await proc.wait()
+                    except Exception as e:
+                        logger.warning(f"PulseAudio コマンド失敗 ({' '.join(cmd[:2])}): {e}")
+                # ALSA→PulseAudio ルーティング設定
+                asoundrc = os.path.expanduser("~/.asoundrc")
+                if not os.path.exists(asoundrc):
+                    try:
+                        with open(asoundrc, "w") as f:
+                            f.write("pcm.!default {\n    type pulse\n}\nctl.!default {\n    type pulse\n}\n")
+                    except Exception:
+                        pass
+                logger.info("PulseAudio セットアップ完了")
+            else:
+                logger.warning("PulseAudio 未インストール（リアルタイム文字起こしは利用不可）")
+
             # ブラウザBot プロセス起動
             # __file__ から相対パスで entrypoint.py を特定（/app シンボリックリンクに依存しない）
             _this_dir = os.path.dirname(os.path.abspath(__file__))          # app/services/
