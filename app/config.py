@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     BACKEND_URL: str = "http://localhost:8000"
 
     # Application
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://techn0tta-frontend-sho-v2.vercel.app"
     MAX_FILE_SIZE_MB: int = 200
 
     @property
