@@ -96,6 +96,8 @@ def main():
 
     threading.Thread(target=log_capture_output, daemon=True).start()
 
+    backend_url = os.environ.get('BACKEND_URL', 'http://host.docker.internal:8000')
+
     try:
         if platform == 'google_meet':
             from google_meet_bot import GoogleMeetBot
@@ -110,6 +112,14 @@ def main():
             sys.exit(1)
     finally:
         logger.info("🛑 クリーンアップ開始...")
+
+        # App Service に会議終了を通知（フロントエンドのステータスポーリングが自動終了フローを開始する）
+        try:
+            import httpx
+            httpx.post(f"{backend_url}/api/bot/{session_id}/complete", timeout=10.0)
+            logger.info("✅ App Service に会議終了を通知しました")
+        except Exception as e:
+            logger.warning(f"会議終了通知失敗（処理は継続）: {e}")
 
         if transcriber_process and transcriber_process.poll() is None:
             logger.info("  realtime_transcriber.py を停止中...")

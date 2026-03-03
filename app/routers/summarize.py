@@ -57,8 +57,22 @@ async def extract_metadata_background(job_id: str, db: Session):
         
         extract_response = await task_service.extract_tasks(extract_request)
         
+        # 案件自動選択（Notion案件DBから最も近い案件をAIが選ぶ）
+        try:
+            project_id, project_name = await metadata_service.select_project(
+                summary=job.summary,
+                transcription=job.transcription
+            )
+            if project_id:
+                metadata.project = project_name
+        except Exception as e:
+            logger.warning(f"案件自動選択スキップ: {e}")
+            project_id = None
+
         # 抽出結果をJSONとして保存
         metadata_dict = metadata.to_dict()
+        if project_id:
+            metadata_dict["project_id"] = project_id
         tasks_list = [
             {
                 "title": t.title,

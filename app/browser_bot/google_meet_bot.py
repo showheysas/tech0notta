@@ -152,11 +152,14 @@ class GoogleMeetBot:
         """マイク・カメラをオフにする（既にオフなら無視）"""
         for selector_key, label in [("mic_off", "マイク"), ("camera_off", "カメラ")]:
             try:
-                btn = page.query_selector(SELECTORS[selector_key])
+                # wait_for_selector で確実にボタンが表示されるまで待つ
+                btn = page.wait_for_selector(SELECTORS[selector_key], timeout=5000)
                 if btn and btn.is_visible():
                     btn.click()
                     logger.info(f"🔇 {label}をオフに設定")
                     time.sleep(0.5)
+            except PlaywrightTimeoutError:
+                logger.debug(f"{label}ボタン未検出（既にオフの可能性）")
             except Exception as e:
                 logger.debug(f"{label}オフ設定スキップ: {e}")
 
@@ -177,14 +180,16 @@ class GoogleMeetBot:
     def _mute_after_join(self, page):
         """会議参加後にマイクをミュートする（参加者にトーンが聞こえるのを防ぐ）"""
         try:
-            time.sleep(4)  # 会議UIのロードを待つ
-            btn = page.query_selector(SELECTORS["mic_on_in_meeting"])
+            # 会議UIのロードを wait_for_selector で確実に待つ
+            btn = page.wait_for_selector(SELECTORS["mic_on_in_meeting"], timeout=10000)
             if btn and btn.is_visible():
                 btn.click()
                 logger.info("🔇 会議参加後にマイクをミュート完了")
                 time.sleep(0.5)
             else:
-                logger.info("🔇 会議参加後マイク: 既にミュート済みまたはボタン未検出")
+                logger.info("🔇 会議参加後マイク: 既にミュート済み")
+        except PlaywrightTimeoutError:
+            logger.info("🔇 会議参加後マイクボタン未検出（既にミュート済みの可能性）")
         except Exception as e:
             logger.debug(f"参加後マイクミュートスキップ: {e}")
 

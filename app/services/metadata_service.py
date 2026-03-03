@@ -3,7 +3,7 @@
 
 Azure OpenAIを使用して議事録テキストから会議メタデータを抽出します。
 """
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from datetime import date
 from app.services.azure_openai import get_azure_openai_service
 from fastapi import HTTPException
@@ -198,6 +198,98 @@ class MetadataService:
                 status_code=500,
                 detail=f"メタデータ抽出に失敗しました: {str(e)}"
             )
+
+
+    async def select_project(
+        self,
+        summary: str,
+        transcription: Optional[str] = None
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        会議内容に最も近い案件をNotionから自動選択する
+
+        Returns:
+            (project_id, project_name) または (None, None)
+        """
+        try:
+            from app.services.notion_client import get_notion_service
+            notion = get_notion_service()
+            projects = await notion.list_projects()
+
+            if not projects:
+                logger.info("案件リストが空のため自動選択スキップ")
+                return None, None
+
+            # 案件リストをプロンプト用に整形
+            project_lines = []
+            for p in projects:
+                name = p.get("name", "")
+                status = p.get("status", "")
+                company = p.get("company_name", "")
+                pid = p.get("id", "")
+                if name and pid:
+                    label = name
+                    if company:
+                        label += f" ({company})"
+                    if status:
+                        label += f" [{status}]"
+                    project_lines.append(f"- ID: {pid} | {label}")
+
+            if not project_lines:
+                return None, None
+
+            projects_text = "\n".join(project_lines)
+
+            # 文字起こしの先頭 1500 文字を補助情報として追加
+            extra = ""
+            if transcription:
+                extra = f"\n\n【文字起こし抜粋】\n{transcription[:1500]}"
+
+            openai_service = get_azure_openai_service()
+            response = openai_service.client.chat.completions.create(
+                model=openai_service.deployment_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "あなたは会議内容と案件を照合するアシスタントです。"
+                            "会議の要約と案件リストを比較し、最も関連性の高い案件を1つ選んでください。"
+                            "確信が持てない場合はnullを返してください。"
+                            "以下のJSON形式で出力してください:\n"
+                            '{"project_id": "<NotionページID>", "project_name": "<案件名>", "reason": "<理由>"}\n'
+                            "または関連案件がなければ:\n"
+                            '{"project_id": null, "project_name": null, "reason": "<理由>"}'
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"【会議要約】\n{summary}{extra}\n\n"
+                            f"【案件リスト】\n{projects_text}\n\n"
+                            "最も関連性の高い案件を選んでください。"
+                        )
+                    }
+                ],
+                temperature=0.1,
+                max_tokens=300,
+                response_format={"type": "json_object"}
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            project_id = result.get("project_id")
+            project_name = result.get("project_name")
+            reason = result.get("reason", "")
+
+            if project_id:
+                logger.info(f"🎯 案件自動選択: {project_name} ({project_id}) — {reason}")
+                return project_id, project_name
+            else:
+                logger.info(f"案件自動選択: 該当なし — {reason}")
+                return None, None
+
+        except Exception as e:
+            logger.warning(f"案件自動選択エラー（スキップ）: {e}")
+            return None, None
 
 
 # シングルトンインスタンス

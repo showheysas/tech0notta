@@ -5,6 +5,8 @@ Bot派遣・状態確認・退出のREST API
 import logging
 from typing import Optional
 
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -132,6 +134,20 @@ async def terminate_bot(session_id: str):
         success=True,
         message="Botを退出させました"
     )
+
+
+@router.post("/{session_id}/complete")
+async def complete_bot_session(session_id: str):
+    """
+    ACIコンテナが会議から自然退出したときに呼び出す。
+    ステータスをCOMPLETEDに更新し、フロントエンドの自動終了フローを起動させる。
+    """
+    session = bot_service.get_session(session_id)
+    if session and session.status not in (BotStatus.COMPLETED, BotStatus.ERROR):
+        session.status = BotStatus.COMPLETED
+        session.updated_at = datetime.utcnow()
+        logger.info(f"✅ Bot自然終了を記録: session_id={session_id}")
+    return {"success": True, "message": "状態をCOMPLETEDに更新しました"}
 
 
 @router.get("/{session_id}/logs")
