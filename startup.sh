@@ -30,22 +30,21 @@ if [ ! -d "/home/playwright" ] || [ -z "$(ls -A /home/playwright 2>/dev/null)" ]
   playwright install chromium 2>/dev/null || echo "WARNING: Playwright Chromium install failed."
 fi
 
-# --- 重いパッケージインストールをバックグラウンドで実行 ---
-# gunicorn の起動を遅延させないため、apt-get は gunicorn 起動後に実行
-# Bot dispatch 時に必要なパッケージが揃っていなければエラーになるが、
-# 通常は gunicorn 起動〜初回 Bot dispatch までに十分間に合う
-_install_system_deps() {
-  echo "Background: installing system packages (ffmpeg, xvfb, pulseaudio)..."
-  apt-get update -qq 2>/dev/null || true
-  apt-get install -y -qq ffmpeg xvfb pulseaudio pulseaudio-utils libasound2-plugins 2>/dev/null || true
-  playwright install-deps chromium 2>/dev/null || true
-  echo "Background: system packages installed."
-}
-_install_system_deps &
-
+# --- gunicorn をバックグラウンドで先に起動（startup probe に即応答するため）---
 PORT="${PORT:-8000}"
-exec gunicorn -k uvicorn.workers.UvicornWorker app.main:app \
+gunicorn -k uvicorn.workers.UvicornWorker app.main:app \
   --bind "0.0.0.0:${PORT}" \
   --workers 1 \
   --timeout 300 \
-  --graceful-timeout 30
+  --graceful-timeout 30 &
+GUNICORN_PID=$!
+
+# --- システムパッケージをフォアグラウンドでインストール（確実に完了させる）---
+echo "Installing system packages (ffmpeg, xvfb, pulseaudio)..."
+apt-get update -qq 2>/dev/null || true
+apt-get install -y -qq ffmpeg xvfb pulseaudio pulseaudio-utils libasound2-plugins 2>/dev/null || true
+playwright install-deps chromium 2>/dev/null || true
+echo "System packages installed."
+
+# gunicorn の終了を待つ（フォアグラウンドプロセスとして維持）
+wait $GUNICORN_PID
