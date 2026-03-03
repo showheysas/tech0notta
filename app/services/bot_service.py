@@ -312,23 +312,32 @@ class BotService:
         """subprocess の stdout をロガーに転送する（パイプバッファ詰まり防止）"""
         if not session.process or not session.process.stdout:
             return
+        # 直近の出力を保存（エラー時のデバッグ用）
+        if not hasattr(session, '_last_output_lines'):
+            session._last_output_lines = []
         async for line in session.process.stdout:
-            logger.info(f"[Bot {session.id[:8]}] {line.decode().rstrip()}")
+            text = line.decode().rstrip()
+            logger.info(f"[Bot {session.id[:8]}] {text}")
+            session._last_output_lines.append(text)
+            if len(session._last_output_lines) > 20:
+                session._last_output_lines.pop(0)
 
     async def _monitor_process(self, session: BotSession) -> None:
         """ブラウザBotプロセスの終了を監視し、ステータスを更新する"""
         if not session.process:
             return
         returncode = await session.process.wait()
+        last_lines = getattr(session, '_last_output_lines', [])
+        tail = "\n".join(last_lines[-5:]) if last_lines else "(出力なし)"
         logger.info(
-            f"ブラウザBotプロセス終了: session_id={session.id}, returncode={returncode}"
+            f"ブラウザBotプロセス終了: session_id={session.id}, returncode={returncode}, tail={tail}"
         )
         if session.status not in (BotStatus.COMPLETED, BotStatus.ERROR, BotStatus.LEAVING):
             if returncode == 0:
                 session.status = BotStatus.COMPLETED
             else:
                 session.status = BotStatus.ERROR
-                session.error_message = f"プロセス終了コード: {returncode}"
+                session.error_message = f"プロセス終了コード: {returncode}\n{tail}"
             session.updated_at = datetime.utcnow()
         self._release_slot(session.id)
 
@@ -400,13 +409,15 @@ class BotService:
         return True
 
     async def get_bot_logs(self, session_id: str) -> str:
-        """プロセスの状態を返す（subprocess方式ではリアルタイムログはロガーに出力済み）"""
+        """プロセスの状態と直近の出力を返す"""
         session = self._sessions.get(session_id)
         if not session:
             return "セッションが見つかりません"
         if not session.process:
             return "プロセスが起動していません"
-        return f"プロセスPID: {session.process.pid}, ステータス: {session.status.value}"
+        last_lines = getattr(session, '_last_output_lines', [])
+        output = "\n".join(last_lines) if last_lines else "(出力なし)"
+        return f"PID: {session.process.pid}, ステータス: {session.status.value}\n--- 出力 ---\n{output}"
 
     async def terminate_sessions_by_meeting_id(self, meeting_id: str) -> int:
         """
