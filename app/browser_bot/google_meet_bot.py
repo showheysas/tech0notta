@@ -72,6 +72,7 @@ class GoogleMeetBot:
                     "--disable-setuid-sandbox",
                     "--use-fake-device-for-media-stream",
                     "--use-file-for-fake-video-capture=/app/black.y4m",
+                    "--use-file-for-fake-audio-capture=/app/silent.wav",
                     "--disable-features=WebRtcHideLocalIpsWithMdns",
                     "--disable-blink-features=AutomationControlled",
                 ]

@@ -54,6 +54,9 @@ RUN chmod +x /app/entrypoint.sh
 # フェイクカメラ用の静止黒画面Y4Mファイルを生成（回転アニメーション→静止画に変更）
 RUN python3 -c 'w,h=640,360; uv=(w//2)*(h//2); f=open("/app/black.y4m","wb"); f.write(("YUV4MPEG2 W"+str(w)+" H"+str(h)+" F30:1 Ip A0:0 C420\n").encode()); f.write(b"FRAME\n"); f.write(bytes(w*h)); f.write(bytes([128]*uv)); f.write(bytes([128]*uv)); f.close()'
 
+# サイレント音声ファイル生成（Botの偽マイクがビープ音を送信しないようにする）
+RUN python3 -c 'import wave; f=wave.open("/app/silent.wav","wb"); f.setnchannels(1); f.setsampwidth(2); f.setframerate(16000); f.writeframes(bytes(16000*2)); f.close()'
+
 RUN mkdir -p /app/recordings && \
     chown -R botuser:botuser /app
 
