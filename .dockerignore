@@ -9,8 +9,10 @@ __pycache__
 dist
 build
 .env
+.env.*
 .venv
 venv
+antenv
 .git
 .gitignore
 .pytest_cache
@@ -19,3 +21,12 @@ htmlcov
 .mypy_cache
 .ruff_cache
 *.log
+tests/
+.github/
+.vscode/
+alembic/
+app/zoom_bot/
+Dockerfile
+Dockerfile.bot
+Dockerfile.browser-bot
+meeting_notes.db

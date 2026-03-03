@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 # スクリプトパス解決: bot_runner/ にある共有スクリプトを参照
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))        # browser_bot/
 _BOT_RUNNER_DIR = os.path.join(os.path.dirname(_SCRIPT_DIR), "bot_runner")  # bot_runner/
+
+# ACA コンテナでは全ファイルが /app/ にフラット配置される
+if os.path.exists(os.path.join(_SCRIPT_DIR, "realtime_transcriber.py")):
+    _BOT_RUNNER_DIR = _SCRIPT_DIR
+
 SETUP_PULSEAUDIO = os.path.join(_BOT_RUNNER_DIR, "setup-pulseaudio.sh")
 REALTIME_TRANSCRIBER = os.path.join(_BOT_RUNNER_DIR, "realtime_transcriber.py")
 AUDIO_CAPTURE = os.path.join(_BOT_RUNNER_DIR, "audio_capture.sh")

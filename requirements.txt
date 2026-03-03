@@ -15,7 +15,7 @@ alembic==1.14.0
 azure-storage-blob==12.23.1
 azure-cognitiveservices-speech==1.41.1
 openai==1.55.3
-azure-mgmt-containerinstance>=10.0.0
+azure-mgmt-containerapp>=2.0.0
 azure-identity>=1.15.0
 
 # Notion
@@ -37,3 +37,7 @@ ffmpeg-python==0.2.0
 
 # Browser Bot (subprocess 方式でブラウザBot を起動するために必要)
 playwright==1.44.0
+
+# Authentication (Azure AD JWT validation)
+python-jose[cryptography]==3.3.0
+cachetools==5.5.0

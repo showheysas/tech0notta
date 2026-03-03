@@ -1,12 +1,12 @@
 """
 Bot派遣サービス
-Zoom / Google Meet / Microsoft Teams へのBot派遣を管理する
+Azure Container Apps (ACA) Job を使って会議Botコンテナを起動・管理する
 """
 import asyncio
 import logging
 import os
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
@@ -43,12 +43,10 @@ class BotSession:
     status: BotStatus
     created_at: datetime
     updated_at: datetime
-    container_id: Optional[str] = None
+    container_id: Optional[str] = None       # ACA Job execution name
     error_message: Optional[str] = None
     platform: BotPlatform = BotPlatform.ZOOM
     meeting_url: Optional[str] = None
-    process: Optional[Any] = None       # asyncio.subprocess.Process (bot)
-    xvfb_process: Optional[Any] = None  # asyncio.subprocess.Process (Xvfb)
 
     def to_dict(self) -> dict:
         return {
@@ -65,28 +63,26 @@ class BotSession:
 
 
 class BotService:
-    """Bot派遣サービス"""
+    """Bot派遣サービス（ACA Job 方式）"""
 
     def __init__(self):
-        # インメモリでセッション管理（本番ではDBに保存）
+        # インメモリでセッション管理
         self._sessions: Dict[str, BotSession] = {}
-        # Xvfb ディスプレイ番号スロット管理（同時複数Bot対応）
-        self._slots: Dict[int, str] = {}  # slot_index → session_id
+        self._aca_client = None
 
-    def _allocate_slot(self, session_id: str) -> int:
-        """ユニークな Xvfb ディスプレイスロットを確保して返す"""
-        for i in range(10):
-            if i not in self._slots:
-                self._slots[i] = session_id
-                return i
-        raise RuntimeError("同時起動可能なBot数の上限（10）に達しました")
+    def _get_aca_client(self):
+        """Azure Container Apps API クライアントを取得（遅延初期化）"""
+        if self._aca_client is None:
+            from azure.identity import DefaultAzureCredential
+            from azure.mgmt.containerapp import ContainerAppsAPIClient
+            from app.config import settings
 
-    def _release_slot(self, session_id: str) -> None:
-        """スロットを解放する"""
-        for slot, sid in list(self._slots.items()):
-            if sid == session_id:
-                del self._slots[slot]
-                return
+            credential = DefaultAzureCredential()
+            self._aca_client = ContainerAppsAPIClient(
+                credential=credential,
+                subscription_id=settings.AZURE_SUBSCRIPTION_ID,
+            )
+        return self._aca_client
 
     def _parse_meeting_url(self, url_or_id: str) -> tuple[str, Optional[str]]:
         """
@@ -140,7 +136,7 @@ class BotService:
         platform: Optional[BotPlatform] = None,
     ) -> BotSession:
         """
-        Botを会議に派遣
+        Botを会議に派遣（ACA Job execution を開始）
 
         Args:
             meeting_id: 会議ID（URLでも可）
@@ -183,22 +179,22 @@ class BotService:
             f"platform={platform.value}"
         )
 
-        # Bot Runnerを起動（非同期）
-        asyncio.create_task(self._run_browser_bot(session))
+        # ACA Job execution を起動（非同期）
+        asyncio.create_task(self._run_aca_job(session))
 
         return session
 
-    async def _run_browser_bot(self, session: BotSession) -> None:
+    async def _run_aca_job(self, session: BotSession) -> None:
         """
-        ブラウザBotを App Service 内の subprocess として起動して会議に参加。
-        ACI コールドスタート（60〜90秒）を排除し、1〜3秒で参加開始できる。
+        ACA Job execution を開始して会議Botコンテナを起動する。
+        コンテナには Xvfb, PulseAudio, Chromium が全てプリインストール済み。
         """
         try:
             session.status = BotStatus.JOINING
             session.updated_at = datetime.utcnow()
 
             logger.info(
-                f"🚀 ブラウザBot起動開始: session_id={session.id}, "
+                f"🚀 ACA Job起動開始: session_id={session.id}, "
                 f"platform={session.platform.value}, meeting_url={session.meeting_url}"
             )
 
@@ -221,187 +217,64 @@ class BotService:
             else:
                 bot_name = teams_config.bot_display_name
 
-            # スロット割り当て（Bot ごとにユニークな Xvfb display 番号を確保）
-            slot = self._allocate_slot(session.id)
-            display_num = 99 + slot
-            # PulseAudio はデフォルトのランタイムパスを使用
-            # （カスタムパスを指定すると pulseaudio --start が作成するソケットと不一致になる）
-
-            # フェイクメディアファイルのパスを解決（/app/ シンボリックリンクに依存しない）
-            _fake_media_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fake_media")
-            os.makedirs(_fake_media_dir, exist_ok=True)
-            _black_y4m = os.path.join(_fake_media_dir, "black.y4m")
-            _silent_wav = os.path.join(_fake_media_dir, "silent.wav")
-            # ファイルが存在しなければ動的生成
-            if not os.path.exists(_black_y4m):
-                w, h = 640, 360
-                uv = (w // 2) * (h // 2)
-                with open(_black_y4m, "wb") as f:
-                    f.write(f"YUV4MPEG2 W{w} H{h} F30:1 Ip A0:0 C420\n".encode())
-                    f.write(b"FRAME\n")
-                    f.write(bytes(w * h))
-                    f.write(bytes([128] * uv * 2))
-                logger.info(f"フェイクビデオ生成: {_black_y4m}")
-            if not os.path.exists(_silent_wav):
-                import wave
-                with wave.open(_silent_wav, "wb") as f:
-                    f.setnchannels(1)
-                    f.setsampwidth(2)
-                    f.setframerate(16000)
-                    f.writeframes(bytes(16000 * 2))
-                logger.info(f"フェイク音声生成: {_silent_wav}")
-
-            env = dict(os.environ)
-            env.update({
-                "DISPLAY": f":{display_num}",
-                "PLATFORM": session.platform.value,
-                "MEETING_URL": session.meeting_url or session.meeting_id,
-                "MEETING_ID": session.meeting_id,
-                "BOT_NAME": bot_name,
-                "BACKEND_URL": settings.BACKEND_URL,
-                "SESSION_ID": session.id,
-                "AZURE_SPEECH_KEY": settings.AZURE_SPEECH_KEY or "",
-                "AZURE_SPEECH_REGION": settings.AZURE_SPEECH_REGION or "japaneast",
-                "FAKE_VIDEO_PATH": _black_y4m,
-                "FAKE_AUDIO_PATH": _silent_wav,
-                "PLAYWRIGHT_BROWSERS_PATH": os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/home/playwright"),
-            })
-
-            # Xvfb がインストール済みか確認（apt-get で140+パッケージのインストールに2-3分かかる）
-            import shutil
-            for _retry in range(90):  # 最大180秒（3分）待つ
-                if shutil.which("Xvfb"):
-                    break
-                if _retry % 10 == 0:  # 20秒ごとにログ
-                    logger.info(f"⏳ Xvfb がまだインストールされていません。待機中... ({_retry+1}/90, {_retry*2}秒経過)")
-                await asyncio.sleep(2)
-            else:
-                raise RuntimeError("Xvfb がインストールされていません（180秒タイムアウト）。App Service を再起動してください。")
-
-            # Xvfb 起動前にロックファイルをクリーンアップ（App Service 再起動後の残留ロック対策）
-            for stale in [f"/tmp/.X{display_num}-lock", f"/tmp/.X11-unix/X{display_num}"]:
-                try:
-                    os.remove(stale)
-                except FileNotFoundError:
-                    pass
-
-            # Xvfb 起動（仮想ディスプレイ）
-            xvfb = await asyncio.create_subprocess_exec(
-                "Xvfb", f":{display_num}", "-screen", "0", "1280x720x24",
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await asyncio.sleep(1)  # Xvfb の初期化を待つ
-
-            # PulseAudio セットアップ（デフォルトのランタイムパスを使用）
-            import shutil as _shutil
-            if _shutil.which("pulseaudio"):
-                pa_cmds = [
-                    ["pulseaudio", "--start", "--exit-idle-time=-1"],
-                    ["pactl", "load-module", "module-null-sink", "sink_name=virtual_speaker",
-                     "sink_properties=device.description=Virtual_Speaker"],
-                    ["pactl", "set-default-sink", "virtual_speaker"],
-                    ["pactl", "set-default-source", "virtual_speaker.monitor"],
-                ]
-                for cmd in pa_cmds:
-                    try:
-                        proc = await asyncio.create_subprocess_exec(
-                            *cmd,
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE,
-                        )
-                        stdout, stderr = await proc.communicate()
-                        if proc.returncode != 0:
-                            logger.warning(f"PulseAudio コマンド失敗 ({' '.join(cmd)}): rc={proc.returncode}, stderr={stderr.decode().strip()}")
-                        else:
-                            logger.info(f"PulseAudio: {' '.join(cmd[:2])} OK")
-                    except Exception as e:
-                        logger.warning(f"PulseAudio コマンド例外 ({' '.join(cmd[:2])}): {e}")
-                # ALSA→PulseAudio ルーティング設定（Speech SDKがALSA経由でPulseAudioに到達するため）
-                asoundrc = os.path.expanduser("~/.asoundrc")
-                try:
-                    with open(asoundrc, "w") as f:
-                        f.write("pcm.!default {\n    type pulse\n}\nctl.!default {\n    type pulse\n}\n")
-                    logger.info("ALSA→PulseAudio ルーティング設定完了 (~/.asoundrc)")
-                except Exception as e:
-                    logger.warning(f"~/.asoundrc 書き込み失敗: {e}")
-                logger.info("PulseAudio セットアップ完了")
-            else:
-                logger.warning("PulseAudio 未インストール（リアルタイム文字起こしは利用不可）")
-
-            # ブラウザBot プロセス起動
-            # __file__ から相対パスで entrypoint.py を特定（/app シンボリックリンクに依存しない）
-            _this_dir = os.path.dirname(os.path.abspath(__file__))          # app/services/
-            _app_dir = os.path.dirname(_this_dir)                           # app/
-            _browser_bot_dir = os.path.join(_app_dir, "browser_bot")
-            entrypoint_path = os.path.join(_browser_bot_dir, "entrypoint.py")
-            logger.info(f"entrypoint_path={entrypoint_path}, cwd={_browser_bot_dir}")
-
-            # browser_bot ディレクトリを PYTHONPATH に追加（bare import 解決用）
-            existing_pypath = env.get("PYTHONPATH", "")
-            env["PYTHONPATH"] = f"{_browser_bot_dir}:{existing_pypath}" if existing_pypath else _browser_bot_dir
-
-            process = await asyncio.create_subprocess_exec(
-                "python3", entrypoint_path,
-                env=env,
-                cwd=_browser_bot_dir,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
+            # ACA Job execution の環境変数
+            from azure.mgmt.containerapp.models import (
+                JobExecutionTemplate,
+                JobExecutionContainer,
+                ContainerResources,
             )
 
-            session.process = process
-            session.xvfb_process = xvfb
+            env_vars = [
+                {"name": "PLATFORM", "value": session.platform.value},
+                {"name": "MEETING_URL", "value": session.meeting_url or session.meeting_id},
+                {"name": "MEETING_ID", "value": session.meeting_id},
+                {"name": "BOT_NAME", "value": bot_name},
+                {"name": "BACKEND_URL", "value": settings.BACKEND_URL},
+                {"name": "SESSION_ID", "value": session.id},
+                {"name": "AZURE_SPEECH_REGION", "value": settings.AZURE_SPEECH_REGION or "japaneast"},
+            ]
+
+            # AZURE_SPEECH_KEY は ACA Job の secret として設定済み（secretRef で参照）
+            env_vars.append({"name": "AZURE_SPEECH_KEY", "secretRef": "azure-speech-key"})
+
+            template = JobExecutionTemplate(
+                containers=[
+                    JobExecutionContainer(
+                        name="bot",
+                        image=settings.ACA_BOT_IMAGE,
+                        env=env_vars,
+                        resources=ContainerResources(cpu=1.0, memory="2Gi"),
+                    )
+                ],
+            )
+
+            # Azure SDK は同期的なので run_in_executor で非同期化
+            client = self._get_aca_client()
+            loop = asyncio.get_event_loop()
+
+            execution = await loop.run_in_executor(
+                None,
+                lambda: client.jobs.begin_start(
+                    resource_group_name=settings.AZURE_RESOURCE_GROUP,
+                    job_name=settings.ACA_BOT_JOB_NAME,
+                    template=template,
+                ).result()
+            )
+
+            session.container_id = execution.name
             session.status = BotStatus.IN_MEETING
             session.updated_at = datetime.utcnow()
 
             logger.info(
-                f"✅ ブラウザBot参加完了 (PID: {process.pid}): session_id={session.id}"
+                f"✅ ACA Job execution 開始: execution_name={execution.name}, "
+                f"session_id={session.id}"
             )
 
-            # subprocess の出力をログに転送（バッファ詰まり防止）
-            asyncio.create_task(self._log_subprocess_output(session))
-            # subprocess の終了を監視してステータスを更新
-            asyncio.create_task(self._monitor_process(session))
-
         except Exception as e:
-            logger.error(f"ブラウザBot起動エラー: {e}")
+            logger.error(f"ACA Job起動エラー: {e}")
             session.status = BotStatus.ERROR
             session.error_message = str(e)
             session.updated_at = datetime.utcnow()
-            self._release_slot(session.id)
-
-    async def _log_subprocess_output(self, session: BotSession) -> None:
-        """subprocess の stdout をロガーに転送する（パイプバッファ詰まり防止）"""
-        if not session.process or not session.process.stdout:
-            return
-        # 直近の出力を保存（エラー時のデバッグ用）
-        if not hasattr(session, '_last_output_lines'):
-            session._last_output_lines = []
-        async for line in session.process.stdout:
-            text = line.decode().rstrip()
-            logger.info(f"[Bot {session.id[:8]}] {text}")
-            session._last_output_lines.append(text)
-            if len(session._last_output_lines) > 20:
-                session._last_output_lines.pop(0)
-
-    async def _monitor_process(self, session: BotSession) -> None:
-        """ブラウザBotプロセスの終了を監視し、ステータスを更新する"""
-        if not session.process:
-            return
-        returncode = await session.process.wait()
-        last_lines = getattr(session, '_last_output_lines', [])
-        tail = "\n".join(last_lines[-5:]) if last_lines else "(出力なし)"
-        logger.info(
-            f"ブラウザBotプロセス終了: session_id={session.id}, returncode={returncode}, tail={tail}"
-        )
-        if session.status not in (BotStatus.COMPLETED, BotStatus.ERROR, BotStatus.LEAVING):
-            if returncode == 0:
-                session.status = BotStatus.COMPLETED
-            else:
-                session.status = BotStatus.ERROR
-                session.error_message = f"プロセス終了コード: {returncode}\n{tail}"
-            session.updated_at = datetime.utcnow()
-        self._release_slot(session.id)
 
     def get_session(self, session_id: str) -> Optional[BotSession]:
         """セッション取得"""
@@ -427,7 +300,7 @@ class BotService:
 
     async def terminate_bot(self, session_id: str) -> bool:
         """
-        Botを会議から退出させる（subprocess を終了）
+        Botを会議から退出させる（ACA Job execution を停止）
 
         Args:
             session_id: セッションID
@@ -445,24 +318,24 @@ class BotService:
 
         logger.info(f"🛑 Bot退出開始: session_id={session_id}")
 
-        # ブラウザBot プロセス終了
-        if session.process and session.process.returncode is None:
+        # ACA Job execution を停止
+        if session.container_id:
             try:
-                session.process.terminate()
-                await asyncio.wait_for(session.process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                session.process.kill()
-            except Exception as e:
-                logger.error(f"ブラウザBotプロセス終了エラー: {e}")
+                from app.config import settings
+                client = self._get_aca_client()
+                loop = asyncio.get_event_loop()
 
-        # Xvfb プロセス終了
-        if session.xvfb_process and session.xvfb_process.returncode is None:
-            try:
-                session.xvfb_process.terminate()
+                await loop.run_in_executor(
+                    None,
+                    lambda: client.jobs.begin_stop_execution(
+                        resource_group_name=settings.AZURE_RESOURCE_GROUP,
+                        job_name=settings.ACA_BOT_JOB_NAME,
+                        job_execution_name=session.container_id,
+                    ).result()
+                )
+                logger.info(f"ACA execution 停止完了: {session.container_id}")
             except Exception as e:
-                logger.error(f"Xvfbプロセス終了エラー: {e}")
-
-        self._release_slot(session_id)
+                logger.error(f"ACA execution 停止エラー: {e}")
 
         session.status = BotStatus.COMPLETED
         session.updated_at = datetime.utcnow()
@@ -471,15 +344,14 @@ class BotService:
         return True
 
     async def get_bot_logs(self, session_id: str) -> str:
-        """プロセスの状態と直近の出力を返す"""
+        """ACA execution の情報を返す"""
         session = self._sessions.get(session_id)
         if not session:
             return "セッションが見つかりません"
-        if not session.process:
-            return "プロセスが起動していません"
-        last_lines = getattr(session, '_last_output_lines', [])
-        output = "\n".join(last_lines) if last_lines else "(出力なし)"
-        return f"PID: {session.process.pid}, ステータス: {session.status.value}\n--- 出力 ---\n{output}"
+        return (
+            f"ACA execution: {session.container_id or '未起動'}, "
+            f"ステータス: {session.status.value}"
+        )
 
     async def terminate_sessions_by_meeting_id(self, meeting_id: str) -> int:
         """

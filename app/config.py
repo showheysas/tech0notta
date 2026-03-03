@@ -53,18 +53,33 @@ class Settings(BaseSettings):
     ZOOM_SDK_KEY: str | None = None
     ZOOM_SDK_SECRET: str | None = None
 
-    # ACI / ACR
+    # Azure Container Apps (ACA) - Bot 実行基盤
     AZURE_SUBSCRIPTION_ID: str | None = None
     AZURE_RESOURCE_GROUP: str | None = None
-    ACI_LOCATION: str = "japaneast"
+    ACA_BOT_JOB_NAME: str | None = None    # e.g. "job-bot-tech0notta"
+    ACA_BOT_IMAGE: str | None = None       # e.g. "acr002tech0nottadev.azurecr.io/tech0notta-bot:latest"
+    BACKEND_URL: str = "http://localhost:8000"
+
+    # ACR (Bot イメージレジストリ)
     ACR_SERVER: str | None = None      # e.g. myregistry.azurecr.io
     ACR_USERNAME: str | None = None
     ACR_PASSWORD: str | None = None
-    BACKEND_URL: str = "http://localhost:8000"
+
+    # Azure AD / Entra ID 認証
+    AZURE_AD_TENANT_ID: str | None = None
+    AZURE_AD_CLIENT_ID: str | None = None
 
     # Application
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://techn0tta-frontend-sho-v2.vercel.app"
     MAX_FILE_SIZE_MB: int = 200
+
+    @property
+    def azure_jwks_uri(self) -> str:
+        return f"https://login.microsoftonline.com/{self.AZURE_AD_TENANT_ID}/discovery/v2.0/keys"
+
+    @property
+    def azure_ad_issuer(self) -> str:
+        return f"https://login.microsoftonline.com/{self.AZURE_AD_TENANT_ID}/v2.0"
 
     @property
     def cors_origins_list(self) -> List[str]:
