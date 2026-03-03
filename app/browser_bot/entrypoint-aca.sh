@@ -14,7 +14,7 @@ export FAKE_VIDEO_PATH="${FAKE_VIDEO_PATH:-/app/black.y4m}"
 export FAKE_AUDIO_PATH="${FAKE_AUDIO_PATH:-/app/silent.wav}"
 
 # Playwright ブラウザパス
-export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-/home/botuser/.local/share/playwright}"
+export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-/home/botuser/pw-browsers}"
 
 # Python パスに /app/ を追加（bare import: google_meet_bot, teams_bot 等に必要）
 export PYTHONPATH="/app:${PYTHONPATH:-}"

@@ -30,8 +30,10 @@ RUN pip3 install --no-cache-dir \
     playwright==1.44.0
 
 # Playwright Chromium ブラウザインストール
-RUN mkdir -p /home/botuser/.cache && \
-    chown -R botuser:botuser /home/botuser/.cache
+# PLAYWRIGHT_BROWSERS_PATH を明示して entrypoint-aca.sh と一致させる
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/botuser/pw-browsers
+RUN mkdir -p /home/botuser/pw-browsers /home/botuser/.cache && \
+    chown -R botuser:botuser /home/botuser
 USER botuser
 RUN playwright install chromium
 USER root
