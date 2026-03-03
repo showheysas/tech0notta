@@ -86,20 +86,8 @@ class ZoomBot:
                 (() => {
                     const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
                     navigator.mediaDevices.getUserMedia = async function(constraints) {
-                        const stream = await orig(constraints);
-                        const audioTracks = stream.getAudioTracks();
-                        if (audioTracks.length > 0) {
-                            try {
-                                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                                const dest = ctx.createMediaStreamDestination();
-                                const silentTrack = dest.stream.getAudioTracks()[0];
-                                audioTracks.forEach(t => { stream.removeTrack(t); t.stop(); });
-                                if (silentTrack) stream.addTrack(silentTrack);
-                            } catch(e) {
-                                audioTracks.forEach(t => { t.enabled = false; });
-                            }
-                        }
-                        return stream;
+                        const c = constraints ? Object.assign({}, constraints, {audio: false}) : constraints;
+                        return await orig(c);
                     };
                 })();
             """)

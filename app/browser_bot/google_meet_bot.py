@@ -102,21 +102,10 @@ class GoogleMeetBot:
                 (() => {
                     const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
                     navigator.mediaDevices.getUserMedia = async function(constraints) {
-                        const stream = await orig(constraints);
-                        // 440Hz偽デバイス音声トラックをAudioContextの無音トラックに差し替え
-                        const audioTracks = stream.getAudioTracks();
-                        if (audioTracks.length > 0) {
-                            try {
-                                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                                const dest = ctx.createMediaStreamDestination();
-                                const silentTrack = dest.stream.getAudioTracks()[0];
-                                audioTracks.forEach(t => { stream.removeTrack(t); t.stop(); });
-                                if (silentTrack) stream.addTrack(silentTrack);
-                            } catch(e) {
-                                audioTracks.forEach(t => { t.enabled = false; });
-                            }
-                        }
-                        return stream;
+                        // audio:false にして偽デバイスの440Hzトーンを送信しない
+                        // （fake deviceはビデオのみ使用、音声は取得しない）
+                        const c = constraints ? Object.assign({}, constraints, {audio: false}) : constraints;
+                        return await orig(c);
                     };
                 })();
             """)

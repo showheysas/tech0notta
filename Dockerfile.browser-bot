@@ -48,6 +48,7 @@ RUN chmod +x /app/setup-pulseaudio.sh /app/audio_capture.sh
 COPY backend/app/browser_bot/entrypoint.py      /app/entrypoint.py
 COPY backend/app/browser_bot/google_meet_bot.py /app/google_meet_bot.py
 COPY backend/app/browser_bot/teams_bot.py       /app/teams_bot.py
+COPY backend/app/browser_bot/zoom_bot.py        /app/zoom_bot.py
 COPY backend/app/browser_bot/entrypoint.sh      /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
