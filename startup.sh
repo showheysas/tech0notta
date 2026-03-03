@@ -39,10 +39,13 @@ gunicorn -k uvicorn.workers.UvicornWorker app.main:app \
   --graceful-timeout 30 &
 GUNICORN_PID=$!
 
-# --- システムパッケージをフォアグラウンドでインストール（確実に完了させる）---
+# --- システムパッケージインストール ---
+# --no-install-recommends で systemd 等の不要な推奨パッケージを除外
+# （systemd がインストールされるとコンテナが再起動するため）
 echo "Installing system packages (ffmpeg, xvfb, pulseaudio)..."
 apt-get update -qq 2>/dev/null || true
-apt-get install -y -qq ffmpeg xvfb pulseaudio pulseaudio-utils libasound2-plugins 2>/dev/null || true
+apt-get install -y -qq --no-install-recommends \
+  ffmpeg xvfb pulseaudio pulseaudio-utils libasound2-plugins 2>/dev/null || true
 playwright install-deps chromium 2>/dev/null || true
 echo "System packages installed."
 
