@@ -69,6 +69,31 @@ class ZoomBot:
         self.bot_name = bot_name
         self.timeout_sec = timeout_min * 60
 
+    def _get_page_state_str(self, page) -> str:
+        """ページの状態を文字列で返す（エラー報告用）"""
+        try:
+            url = page.url
+            title = page.title()
+            body = page.evaluate("() => document.body ? document.body.innerText.substring(0, 800) : 'no body'")
+            buttons = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('button')).slice(0, 15).map(b =>
+                    `[btn] text="${b.innerText.substring(0,40)}" id=${b.id} class=${b.className.substring(0,60)} visible=${b.offsetParent!==null}`
+                ).join('\\n');
+            }""")
+            inputs = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('input')).slice(0, 8).map(i =>
+                    `[input] type=${i.type} id=${i.id} placeholder="${i.placeholder}" visible=${i.offsetParent!==null}`
+                ).join('\\n');
+            }""")
+            links = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('a')).slice(0, 10).map(a =>
+                    `[a] text="${a.innerText.substring(0,40)}" href=${(a.href||'').substring(0,80)} visible=${a.offsetParent!==null}`
+                ).join('\\n');
+            }""")
+            return f"URL={url}\nTitle={title}\nBody:\n{body}\n\nButtons:\n{buttons}\n\nInputs:\n{inputs}\n\nLinks:\n{links}"
+        except Exception as e:
+            return f"Page state capture failed: {e}"
+
     def _dump_page_state(self, page, label: str):
         """ページの状態をログに出力（デバッグ用）"""
         try:
@@ -176,9 +201,9 @@ class ZoomBot:
                 self._wait_for_meeting_end(page)
 
             except Exception as e:
-                self._dump_page_state(page, "エラー発生時")
-                logger.error(f"Zoom Bot エラー: {e}")
-                raise
+                page_info = self._get_page_state_str(page)
+                logger.error(f"Zoom Bot エラー: {e}\n{page_info}")
+                raise RuntimeError(f"{e}\n--- Page State ---\n{page_info}") from e
             finally:
                 browser.close()
 
