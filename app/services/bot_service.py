@@ -227,6 +227,30 @@ class BotService:
             pulse_path = f"/tmp/pulse-{session.id}"
             os.makedirs(pulse_path, exist_ok=True)
 
+            # フェイクメディアファイルのパスを解決（/app/ シンボリックリンクに依存しない）
+            _fake_media_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fake_media")
+            os.makedirs(_fake_media_dir, exist_ok=True)
+            _black_y4m = os.path.join(_fake_media_dir, "black.y4m")
+            _silent_wav = os.path.join(_fake_media_dir, "silent.wav")
+            # ファイルが存在しなければ動的生成
+            if not os.path.exists(_black_y4m):
+                w, h = 640, 360
+                uv = (w // 2) * (h // 2)
+                with open(_black_y4m, "wb") as f:
+                    f.write(f"YUV4MPEG2 W{w} H{h} F30:1 Ip A0:0 C420\n".encode())
+                    f.write(b"FRAME\n")
+                    f.write(bytes(w * h))
+                    f.write(bytes([128] * uv * 2))
+                logger.info(f"フェイクビデオ生成: {_black_y4m}")
+            if not os.path.exists(_silent_wav):
+                import wave
+                with wave.open(_silent_wav, "wb") as f:
+                    f.setnchannels(1)
+                    f.setsampwidth(2)
+                    f.setframerate(16000)
+                    f.writeframes(bytes(16000 * 2))
+                logger.info(f"フェイク音声生成: {_silent_wav}")
+
             env = dict(os.environ)
             env.update({
                 "DISPLAY": f":{display_num}",
@@ -240,6 +264,8 @@ class BotService:
                 "SESSION_ID": session.id,
                 "AZURE_SPEECH_KEY": settings.AZURE_SPEECH_KEY or "",
                 "AZURE_SPEECH_REGION": settings.AZURE_SPEECH_REGION or "japaneast",
+                "FAKE_VIDEO_PATH": _black_y4m,
+                "FAKE_AUDIO_PATH": _silent_wav,
             })
 
             # Xvfb がインストール済みか確認（バックグラウンド apt-get がまだ完了していない場合がある）
