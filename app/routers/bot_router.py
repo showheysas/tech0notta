@@ -136,6 +136,20 @@ async def terminate_bot(session_id: str):
     )
 
 
+@router.post("/{session_id}/joining")
+async def bot_joining(session_id: str):
+    """
+    ACAコンテナが会議の参加ボタンをクリックしたときに呼び出す。
+    ステータスをJOININGに更新し、フロントエンドにBotが参加処理中であることを通知する。
+    """
+    session = bot_service.get_session(session_id)
+    if session and session.status not in (BotStatus.COMPLETED, BotStatus.ERROR):
+        session.status = BotStatus.JOINING
+        session.updated_at = datetime.utcnow()
+        logger.info(f"🔔 Bot参加ボタンクリック通知: session_id={session_id}")
+    return {"success": True}
+
+
 class CompleteBotRequest(BaseModel):
     """Bot終了通知リクエスト（ACAコンテナから呼ばれる）"""
     error_message: Optional[str] = None

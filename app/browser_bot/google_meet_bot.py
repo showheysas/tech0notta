@@ -227,6 +227,18 @@ class GoogleMeetBot:
             except Exception as e:
                 logger.debug(f"{label}オフ設定スキップ: {e}")
 
+    def _notify_joining(self):
+        """バックエンドに参加ボタンクリックを通知"""
+        try:
+            import httpx
+            backend_url = os.environ.get('BACKEND_URL', '')
+            session_id = os.environ.get('SESSION_ID', '')
+            if backend_url and session_id:
+                httpx.post(f"{backend_url}/api/bot/{session_id}/joining", timeout=5.0)
+                logger.info("📡 バックエンドに参加通知を送信")
+        except Exception as e:
+            logger.warning(f"参加通知送信失敗（続行）: {e}")
+
     def _click_join(self, page):
         """参加ボタンをクリック"""
         try:
@@ -236,6 +248,7 @@ class GoogleMeetBot:
             if join_btn:
                 join_btn.click()
                 logger.info("✅ 参加ボタンクリック完了")
+                self._notify_joining()
                 time.sleep(3)  # 参加処理の待機
         except PlaywrightTimeoutError:
             logger.error("❌ 参加ボタンが見つかりませんでした")

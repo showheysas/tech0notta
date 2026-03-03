@@ -3,6 +3,7 @@ Zoom ゲスト参加Bot
 Playwrightを使ってZoom Webクライアント経由でゲスト参加し、会議終了まで待機する
 """
 import logging
+import os
 import time
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
@@ -15,19 +16,27 @@ SELECTORS = {
     "join_from_browser": (
         'a:has-text("Join from your Browser"), '
         'a:has-text("ブラウザから参加"), '
-        'a:has-text("Join from Your Browser")'
+        'a:has-text("Join from Your Browser"), '
+        'a:has-text("join from your browser"), '
+        'a[href*="wc/join"], '
+        '#webclient'
     ),
     # 名前入力フィールド
     "name_input": (
         'input#inputname, '
         'input[placeholder="Your Name"], '
+        'input[placeholder="Your name"], '
         'input[placeholder="お名前"], '
-        'input[placeholder="名前"]'
+        'input[placeholder="名前"], '
+        'input[aria-label*="name" i]'
     ),
     # 参加ボタン（名前入力後）
     "join_button": (
         'button#joinBtn, '
         'button.preview-join-button, '
+        'button.zm-btn--primary:has-text("Join"), '
+        'button.zm-btn--primary:has-text("参加"), '
+        'button[class*="join"]:visible, '
         'button:has-text("Join"), '
         'button:has-text("参加")'
     ),
@@ -60,7 +69,59 @@ class ZoomBot:
         self.bot_name = bot_name
         self.timeout_sec = timeout_min * 60
 
+    def _dump_page_state(self, page, label: str):
+        """ページの状態をログに出力（デバッグ用）"""
+        try:
+            title = page.title()
+            url = page.url
+            body_text = page.evaluate("() => document.body ? document.body.innerText.substring(0, 1500) : 'no body'")
+            logger.info(f"📸 [{label}] URL={url}, Title={title}")
+            logger.info(f"📸 [{label}] Body text (先頭1500文字):\n{body_text}")
+            buttons = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('button')).slice(0, 20).map(b => ({
+                    text: b.innerText.substring(0, 50),
+                    id: b.id || '',
+                    className: b.className.substring(0, 80),
+                    visible: b.offsetParent !== null
+                }));
+            }""")
+            logger.info(f"📸 [{label}] Buttons ({len(buttons)}): {buttons}")
+            inputs = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('input')).slice(0, 10).map(i => ({
+                    type: i.type,
+                    id: i.id || '',
+                    placeholder: i.placeholder || '',
+                    ariaLabel: i.getAttribute('aria-label') || '',
+                    visible: i.offsetParent !== null
+                }));
+            }""")
+            logger.info(f"📸 [{label}] Inputs ({len(inputs)}): {inputs}")
+            links = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('a')).slice(0, 15).map(a => ({
+                    text: a.innerText.substring(0, 50),
+                    href: (a.href || '').substring(0, 100),
+                    visible: a.offsetParent !== null
+                }));
+            }""")
+            logger.info(f"📸 [{label}] Links ({len(links)}): {links}")
+        except Exception as e:
+            logger.warning(f"📸 [{label}] ページ状態取得失敗: {e}")
+
+    def _notify_joining(self):
+        """バックエンドに参加ボタンクリックを通知"""
+        try:
+            import httpx
+            backend_url = os.environ.get('BACKEND_URL', '')
+            session_id = os.environ.get('SESSION_ID', '')
+            if backend_url and session_id:
+                httpx.post(f"{backend_url}/api/bot/{session_id}/joining", timeout=5.0)
+                logger.info("📡 バックエンドに参加通知を送信")
+        except Exception as e:
+            logger.warning(f"参加通知送信失敗（続行）: {e}")
+
     def run(self):
+        fake_video = os.environ.get("FAKE_VIDEO_PATH", "/app/black.y4m")
+        fake_audio = os.environ.get("FAKE_AUDIO_PATH", "/app/silent.wav")
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=False,  # Xvfb上で動作
@@ -68,6 +129,8 @@ class ZoomBot:
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
                     "--use-fake-device-for-media-stream",
+                    f"--use-file-for-fake-video-capture={fake_video}",
+                    f"--use-file-for-fake-audio-capture={fake_audio}",
                     "--disable-blink-features=AutomationControlled",
                 ]
             )
@@ -76,29 +139,25 @@ class ZoomBot:
                 user_agent=(
                     "Mozilla/5.0 (X11; Linux x86_64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
+                    "Chrome/131.0.0.0 Safari/537.36"
                 )
             )
             page = context.new_page()
 
-            # ページコード実行前にgetUserMediaをオーバーライド（ビープ音対策）
-            page.add_init_script("""
-                (() => {
-                    const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-                    navigator.mediaDevices.getUserMedia = async function(constraints) {
-                        const c = constraints ? Object.assign({}, constraints, {audio: false}) : constraints;
-                        return await orig(c);
-                    };
-                })();
-            """)
-
             try:
                 logger.info(f"🌐 Zoom 会議URLに移動: {self.meeting_url}")
                 page.goto(self.meeting_url, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_load_state("load", timeout=30000)
                 logger.info(f"📄 ページタイトル: {page.title()}")
+
+                # ページ初期状態をダンプ（デバッグ）
+                self._dump_page_state(page, "初期ロード後")
 
                 # 「ブラウザから参加」をクリック（デスクトップアプリ起動をスキップ）
                 self._click_join_from_browser(page)
+
+                # ページ状態をダンプ（ブラウザ参加選択後）
+                self._dump_page_state(page, "ブラウザ参加選択後")
 
                 # 名前を入力
                 logger.info("👤 名前入力中...")
@@ -107,6 +166,9 @@ class ZoomBot:
                 # 参加ボタンをクリック
                 self._click_join(page)
 
+                # バックエンドに参加通知
+                self._notify_joining()
+
                 # 音声ダイアログを処理（必要なら閉じる）
                 self._handle_audio_dialog(page)
 
@@ -114,6 +176,7 @@ class ZoomBot:
                 self._wait_for_meeting_end(page)
 
             except Exception as e:
+                self._dump_page_state(page, "エラー発生時")
                 logger.error(f"Zoom Bot エラー: {e}")
                 raise
             finally:
@@ -128,7 +191,8 @@ class ZoomBot:
             if link and link.is_visible():
                 link.click()
                 logger.info("🌐 ブラウザから参加を選択")
-                time.sleep(2)
+                page.wait_for_load_state("load", timeout=30000)
+                time.sleep(3)
         except PlaywrightTimeoutError:
             logger.info("「ブラウザから参加」リンクなし、続行")
 
@@ -148,7 +212,7 @@ class ZoomBot:
         """参加ボタンをクリック"""
         try:
             join_btn = page.wait_for_selector(
-                SELECTORS["join_button"], timeout=20000
+                SELECTORS["join_button"], timeout=30000
             )
             if join_btn and join_btn.is_visible():
                 join_btn.click()
@@ -156,6 +220,7 @@ class ZoomBot:
                 time.sleep(3)
         except PlaywrightTimeoutError:
             logger.error("❌ 参加ボタンが見つかりませんでした")
+            self._dump_page_state(page, "参加ボタン未検出")
             raise
 
     def _handle_audio_dialog(self, page):
