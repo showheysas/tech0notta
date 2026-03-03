@@ -47,6 +47,14 @@ SELECTORS = {
         'button[aria-label="Turn off camera"], '
         'button[aria-label="カメラをオフにする"]'
     ),
+    # 会議中のマイクONボタン（クリックするとミュートになる）
+    "mic_on_in_meeting": (
+        'button[aria-label="Turn off microphone (⌘D)"], '
+        'button[aria-label="マイクをオフにする (⌘D)"], '
+        'button[aria-label="Turn off microphone"], '
+        'button[aria-label="マイクをオフにする"], '
+        'button[jsname="BOHaEe"][data-is-muted="false"]'
+    ),
     # 会議終了検知テキスト
     "call_ended": (
         'text="You\'ve left the call", '
@@ -105,6 +113,9 @@ class GoogleMeetBot:
                 # 参加ボタンをクリック
                 self._click_join(page)
 
+                # 参加後にマイクをミュート（偽デバイスのトーンが参加者に聞こえるのを防ぐ）
+                self._mute_after_join(page)
+
                 # 会議終了まで待機
                 self._wait_for_meeting_end(page)
 
@@ -162,6 +173,20 @@ class GoogleMeetBot:
         except PlaywrightTimeoutError:
             logger.error("❌ 参加ボタンが見つかりませんでした")
             raise
+
+    def _mute_after_join(self, page):
+        """会議参加後にマイクをミュートする（参加者にトーンが聞こえるのを防ぐ）"""
+        try:
+            time.sleep(4)  # 会議UIのロードを待つ
+            btn = page.query_selector(SELECTORS["mic_on_in_meeting"])
+            if btn and btn.is_visible():
+                btn.click()
+                logger.info("🔇 会議参加後にマイクをミュート完了")
+                time.sleep(0.5)
+            else:
+                logger.info("🔇 会議参加後マイク: 既にミュート済みまたはボタン未検出")
+        except Exception as e:
+            logger.debug(f"参加後マイクミュートスキップ: {e}")
 
     def _wait_for_meeting_end(self, page):
         """会議終了まで待機（タイムアウトまたは終了検知）"""

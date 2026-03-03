@@ -6,8 +6,9 @@ import logging
 from typing import Optional
 
 import uuid
+from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query, File, UploadFile, Form, Depends
+from fastapi import APIRouter, HTTPException, Query, File, UploadFile, Form, Depends, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -369,8 +370,64 @@ async def receive_audio(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def auto_summarize_background(job_id: str):
+    """会議終了後に要約・メタデータ抽出を自動実行するバックグラウンドタスク"""
+    from app.database import SessionLocal
+    from app.services.azure_openai import get_azure_openai_service
+    from app.routers.summarize import extract_metadata_background
+
+    db = SessionLocal()
+    try:
+        job = db.query(Job).filter(Job.job_id == job_id).first()
+        if not job:
+            return
+        if job.status != JobStatus.TRANSCRIBED.value:
+            logger.info(f"自動要約スキップ: status={job.status}, job_id={job_id}")
+            return
+        if not job.transcription:
+            logger.info(f"自動要約スキップ: transcription 未設定, job_id={job_id}")
+            return
+
+        logger.info(f"🤖 自動要約開始: job_id={job_id}")
+
+        # 要約生成
+        job.status = JobStatus.SUMMARIZING.value
+        job.updated_at = datetime.utcnow()
+        db.commit()
+
+        summary = get_azure_openai_service().generate_summary(job.transcription)
+
+        job.summary = summary
+        job.status = JobStatus.SUMMARIZED.value
+        job.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(job)
+
+        logger.info(f"✅ 要約完了: job_id={job_id}")
+
+        # メタデータ・タスク抽出（summarize.py の既存処理を再利用）
+        await extract_metadata_background(job_id, db)
+
+    except Exception as e:
+        logger.error(f"自動要約エラー: job_id={job_id}, error={e}")
+        try:
+            job = db.query(Job).filter(Job.job_id == job_id).first()
+            if job and job.status in (JobStatus.SUMMARIZING.value,):
+                job.status = JobStatus.TRANSCRIBED.value
+                job.updated_at = datetime.utcnow()
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
 @router.post("/segments/{session_id}/finalize")
-async def finalize_session(session_id: str, db: Session = Depends(get_db)):
+async def finalize_session(
+    session_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     """
     ライブセッションを終了し、文字起こしをJobレコードとしてDBに保存する
 
@@ -414,6 +471,11 @@ async def finalize_session(session_id: str, db: Session = Depends(get_db)):
         f"✅ ライブセッション確定: session_id={session_id}, "
         f"job_id={job_id}, segment_count={segment_count}"
     )
+
+    # 文字起こしがある場合は自動要約を非同期実行
+    if transcription_text:
+        background_tasks.add_task(auto_summarize_background, job_id)
+        logger.info(f"🤖 自動要約をバックグラウンドでスケジュール: job_id={job_id}")
 
     return {"job_id": job_id, "segment_count": segment_count}
 
