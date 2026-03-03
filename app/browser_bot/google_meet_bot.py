@@ -95,6 +95,32 @@ class GoogleMeetBot:
             )
             page = context.new_page()
 
+            # ページコード実行前にgetUserMediaをオーバーライド
+            # --use-fake-device-for-media-stream が生成する440Hz sine wave を
+            # Google Meet に渡す前に無効化する（根本的なビープ音対策）
+            page.add_init_script("""
+                (() => {
+                    const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+                    navigator.mediaDevices.getUserMedia = async function(constraints) {
+                        const stream = await orig(constraints);
+                        // 440Hz偽デバイス音声トラックをAudioContextの無音トラックに差し替え
+                        const audioTracks = stream.getAudioTracks();
+                        if (audioTracks.length > 0) {
+                            try {
+                                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                                const dest = ctx.createMediaStreamDestination();
+                                const silentTrack = dest.stream.getAudioTracks()[0];
+                                audioTracks.forEach(t => { stream.removeTrack(t); t.stop(); });
+                                if (silentTrack) stream.addTrack(silentTrack);
+                            } catch(e) {
+                                audioTracks.forEach(t => { t.enabled = false; });
+                            }
+                        }
+                        return stream;
+                    };
+                })();
+            """)
+
             try:
                 logger.info(f"🌐 Google Meet に移動: {self.meeting_url}")
                 page.goto(self.meeting_url, wait_until="domcontentloaded", timeout=60000)

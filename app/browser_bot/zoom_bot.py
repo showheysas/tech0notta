@@ -1,7 +1,6 @@
 """
-Microsoft Teams ゲスト参加Bot
-Playwrightを使ってTeamsにゲスト（Microsoftアカウント不要）として参加し、
-会議終了まで待機する
+Zoom ゲスト参加Bot
+Playwrightを使ってZoom Webクライアント経由でゲスト参加し、会議終了まで待機する
 """
 import logging
 import time
@@ -10,50 +9,52 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 
 logger = logging.getLogger(__name__)
 
-# セレクタ定数（TeamsのUI変更に追従するため適宜更新）
+# セレクタ定数（Zoom Web UIの変更に追従するため適宜更新）
 SELECTORS = {
-    # 「代わりにWebで参加」リンク（アプリダウンロード画面をスキップ）
-    "join_on_web": (
-        'a:has-text("Continue on this browser"), '
-        'a:has-text("このブラウザーで続ける"), '
-        'button:has-text("Continue on this browser"), '
-        'button:has-text("このブラウザーで続ける")'
+    # 「ブラウザから参加」リンク（アプリ起動画面をスキップ）
+    "join_from_browser": (
+        'a:has-text("Join from your Browser"), '
+        'a:has-text("ブラウザから参加"), '
+        'a:has-text("Join from Your Browser")'
     ),
-    # 名前入力フィールド（ゲスト参加時）
+    # 名前入力フィールド
     "name_input": (
-        'input[placeholder="Type your name"], '
-        'input[placeholder="名前を入力してください"], '
-        'input[data-tid="prejoin-display-name-input"]'
+        'input#inputname, '
+        'input[placeholder="Your Name"], '
+        'input[placeholder="お名前"], '
+        'input[placeholder="名前"]'
     ),
-    # 参加ボタン
+    # 参加ボタン（名前入力後）
     "join_button": (
-        'button[data-tid="prejoin-join-button"], '
-        'button:has-text("Join now"), '
-        'button:has-text("今すぐ参加")'
+        'button#joinBtn, '
+        'button.preview-join-button, '
+        'button:has-text("Join"), '
+        'button:has-text("参加")'
     ),
-    # マイクオフ（参加前）
-    "mic_toggle": (
-        'button[data-tid="toggle-mute"], '
-        'button[aria-label*="mute"], '
-        'button[aria-label*="マイク"]'
+    # 音声ダイアログの「コンピューターのオーディオに参加」
+    "join_audio": (
+        'button:has-text("Join Audio by Computer"), '
+        'button:has-text("コンピューターオーディオに参加"), '
+        'button.join-audio-by-voip__join-btn'
     ),
-    # カメラオフ（参加前）
-    "camera_toggle": (
-        'button[data-tid="toggle-video"], '
-        'button[aria-label*="camera"], '
-        'button[aria-label*="カメラ"]'
+    # 音声ダイアログを閉じる（「後で」「Skip」など）
+    "skip_audio": (
+        'button:has-text("No, Thanks"), '
+        'button:has-text("後で"), '
+        'button:has-text("Skip")'
     ),
-    # 会議終了検知テキスト
-    "call_ended": (
-        'text="The meeting has ended", '
-        'text="会議が終了しました", '
-        'text="You left the meeting", '
-        'text="会議から退出しました"'
+    # 会議終了検知
+    "meeting_ended": (
+        'text="This meeting has been ended by the host", '
+        'text="ホストによって会議が終了されました", '
+        'text="Meeting is ended", '
+        '.meeting-ended-dialog, '
+        '.zm-modal-body-title:has-text("ended")'
     ),
 }
 
 
-class TeamsBot:
+class ZoomBot:
     def __init__(self, meeting_url: str, bot_name: str, timeout_min: int = 180):
         self.meeting_url = meeting_url
         self.bot_name = bot_name
@@ -104,45 +105,47 @@ class TeamsBot:
             """)
 
             try:
-                logger.info(f"🌐 Teams 会議URLに移動: {self.meeting_url}")
-                page.goto(self.meeting_url, wait_until="networkidle", timeout=30000)
+                logger.info(f"🌐 Zoom 会議URLに移動: {self.meeting_url}")
+                page.goto(self.meeting_url, wait_until="domcontentloaded", timeout=60000)
+                logger.info(f"📄 ページタイトル: {page.title()}")
 
-                # 「Webで参加」を選択（アプリダウンロード画面をスキップ）
-                self._click_join_on_web(page)
+                # 「ブラウザから参加」をクリック（デスクトップアプリ起動をスキップ）
+                self._click_join_from_browser(page)
 
-                # 名前入力
+                # 名前を入力
+                logger.info("👤 名前入力中...")
                 self._enter_name(page)
-
-                # マイク・カメラをオフに
-                self._disable_av(page)
 
                 # 参加ボタンをクリック
                 self._click_join(page)
+
+                # 音声ダイアログを処理（必要なら閉じる）
+                self._handle_audio_dialog(page)
 
                 # 会議終了まで待機
                 self._wait_for_meeting_end(page)
 
             except Exception as e:
-                logger.error(f"Teams Bot エラー: {e}")
+                logger.error(f"Zoom Bot エラー: {e}")
                 raise
             finally:
                 browser.close()
 
-    def _click_join_on_web(self, page):
-        """「このブラウザーで続ける」をクリックしてアプリ誘導をスキップ"""
+    def _click_join_from_browser(self, page):
+        """「ブラウザから参加」リンクをクリックしてアプリ起動をスキップ"""
         try:
-            web_btn = page.wait_for_selector(
-                SELECTORS["join_on_web"], timeout=10000
+            link = page.wait_for_selector(
+                SELECTORS["join_from_browser"], timeout=15000
             )
-            if web_btn:
-                web_btn.click()
-                logger.info("🌐 Webで参加を選択")
+            if link and link.is_visible():
+                link.click()
+                logger.info("🌐 ブラウザから参加を選択")
                 time.sleep(2)
         except PlaywrightTimeoutError:
-            logger.info("Webで参加ボタンなし、続行")
+            logger.info("「ブラウザから参加」リンクなし、続行")
 
     def _enter_name(self, page):
-        """ゲスト名入力フィールドに Bot 名を入力"""
+        """名前入力フィールドにBot名を入力"""
         try:
             name_field = page.wait_for_selector(
                 SELECTORS["name_input"], timeout=15000
@@ -153,28 +156,13 @@ class TeamsBot:
         except PlaywrightTimeoutError:
             logger.info("名前入力フィールドなし、スキップ")
 
-    def _disable_av(self, page):
-        """マイク・カメラをオフにする"""
-        for selector_key, label in [("mic_toggle", "マイク"), ("camera_toggle", "カメラ")]:
-            try:
-                btn = page.query_selector(SELECTORS[selector_key])
-                if btn and btn.is_visible():
-                    # aria-pressed="true" の場合はオンなのでクリックしてオフにする
-                    pressed = btn.get_attribute("aria-pressed")
-                    if pressed == "true":
-                        btn.click()
-                        logger.info(f"🔇 {label}をオフに設定")
-                        time.sleep(0.5)
-            except Exception as e:
-                logger.debug(f"{label}オフ設定スキップ: {e}")
-
     def _click_join(self, page):
         """参加ボタンをクリック"""
         try:
             join_btn = page.wait_for_selector(
                 SELECTORS["join_button"], timeout=20000
             )
-            if join_btn:
+            if join_btn and join_btn.is_visible():
                 join_btn.click()
                 logger.info("✅ 参加ボタンクリック完了")
                 time.sleep(3)
@@ -182,15 +170,35 @@ class TeamsBot:
             logger.error("❌ 参加ボタンが見つかりませんでした")
             raise
 
+    def _handle_audio_dialog(self, page):
+        """音声設定ダイアログが出た場合の処理（無音参加）"""
+        try:
+            # 「コンピューターオーディオに参加」があればクリック（ミュートのまま参加）
+            audio_btn = page.wait_for_selector(
+                SELECTORS["join_audio"], timeout=5000
+            )
+            if audio_btn and audio_btn.is_visible():
+                audio_btn.click()
+                logger.info("🔊 オーディオダイアログ: コンピューターオーディオに参加")
+        except PlaywrightTimeoutError:
+            # 「後で」「Skip」があれば閉じる
+            try:
+                skip_btn = page.query_selector(SELECTORS["skip_audio"])
+                if skip_btn and skip_btn.is_visible():
+                    skip_btn.click()
+                    logger.info("🔕 オーディオダイアログをスキップ")
+            except Exception:
+                pass
+
     def _wait_for_meeting_end(self, page):
-        """会議終了まで待機"""
+        """会議終了まで待機（タイムアウトまたは終了検知）"""
         logger.info(f"⏳ 会議終了を待機中（最大 {self.timeout_sec // 60} 分）...")
         start_time = time.time()
         check_interval = 10
 
         while time.time() - start_time < self.timeout_sec:
             try:
-                ended_element = page.query_selector(SELECTORS["call_ended"])
+                ended_element = page.query_selector(SELECTORS["meeting_ended"])
                 if ended_element and ended_element.is_visible():
                     logger.info("📵 会議終了を検知しました")
                     return

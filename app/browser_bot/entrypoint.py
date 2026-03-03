@@ -107,6 +107,10 @@ def main():
             from teams_bot import TeamsBot
             logger.info(f"🟣 Teams Bot 起動: {meeting_url}")
             TeamsBot(meeting_url=meeting_url, bot_name=bot_name).run()
+        elif platform == 'zoom':
+            from zoom_bot import ZoomBot
+            logger.info(f"🔵 Zoom Bot 起動: {meeting_url}")
+            ZoomBot(meeting_url=meeting_url, bot_name=bot_name).run()
         else:
             logger.error(f"❌ 未対応のプラットフォーム: {platform}")
             sys.exit(1)

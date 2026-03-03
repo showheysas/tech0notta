@@ -145,34 +145,13 @@ class BotService:
         if platform is None:
             platform = self._detect_platform(meeting_url or meeting_id)
 
-        if platform == BotPlatform.ZOOM:
-            # Zoom: URLからID/パスワードを抽出
-            clean_meeting_id, extracted_password = self._parse_meeting_url(meeting_id)
-            final_password = password or extracted_password
+        # Zoom / Google Meet / Teams すべてブラウザBot経由でURLをそのまま使用
+        clean_meeting_id = meeting_url or meeting_id
+        final_password = None
+        jwt_token = None
 
-            if not clean_meeting_id:
-                raise ValueError("有効なZoom会議IDまたはURLを指定してください")
-
-            if not sdk_jwt_service.is_configured():
-                raise ValueError(
-                    "SDK設定が不完全です。"
-                    "ZOOM_SDK_KEY, ZOOM_SDK_SECRETを設定してください。"
-                )
-
-            jwt_token = sdk_jwt_service.generate_jwt(
-                meeting_number=clean_meeting_id,
-                role=0  # 参加者として参加
-            )
-            if not jwt_token:
-                raise ValueError("SDK JWT生成に失敗しました")
-        else:
-            # Google Meet / Teams: URLをそのまま使用
-            clean_meeting_id = meeting_url or meeting_id
-            final_password = None
-            jwt_token = None
-
-            if not clean_meeting_id:
-                raise ValueError("有効な会議URLを指定してください")
+        if not clean_meeting_id:
+            raise ValueError("有効な会議URLを指定してください")
 
         # セッション作成
         session_id = str(uuid.uuid4())
@@ -203,10 +182,8 @@ class BotService:
 
     async def _run_bot(self, session: BotSession, jwt_token: Optional[str]) -> None:
         """プラットフォームに応じてBot Runnerコンテナを起動"""
-        if session.platform == BotPlatform.ZOOM:
-            await self._run_zoom_bot(session, jwt_token)
-        else:
-            await self._run_browser_bot(session)
+        # ZoomはブラウザBot（Playwright）経由で参加（C++ SDK廃止）
+        await self._run_browser_bot(session)
 
     async def _run_zoom_bot(self, session: BotSession, jwt_token: Optional[str]) -> None:
         """
@@ -347,12 +324,14 @@ class BotService:
 
             if session.platform == BotPlatform.GOOGLE_MEET:
                 bot_name = google_meet_config.bot_display_name
+            elif session.platform == BotPlatform.ZOOM:
+                bot_name = zoom_config.bot_display_name
             else:
                 bot_name = teams_config.bot_display_name
 
             env_vars = [
                 EnvironmentVariable(name="PLATFORM", value=session.platform.value),
-                EnvironmentVariable(name="MEETING_URL", value=session.meeting_url or ""),
+                EnvironmentVariable(name="MEETING_URL", value=session.meeting_url or session.meeting_id),
                 EnvironmentVariable(name="MEETING_ID", value=session.meeting_id),
                 EnvironmentVariable(name="BOT_NAME", value=bot_name),
                 EnvironmentVariable(name="BACKEND_URL", value=backend_url),
