@@ -144,9 +144,9 @@ async def bot_joining(session_id: str):
     """
     session = bot_service.get_session(session_id)
     if session and session.status not in (BotStatus.COMPLETED, BotStatus.ERROR):
-        session.status = BotStatus.JOINING
+        session.status = BotStatus.IN_MEETING
         session.updated_at = datetime.utcnow()
-        logger.info(f"🔔 Bot参加ボタンクリック通知: session_id={session_id}")
+        logger.info(f"🔔 Bot参加ボタンクリック通知 → IN_MEETING: session_id={session_id}")
     return {"success": True}
 
 

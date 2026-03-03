@@ -262,12 +262,14 @@ class BotService:
             )
 
             session.container_id = execution.name
-            session.status = BotStatus.IN_MEETING
+            # ステータスは JOINING のまま維持
+            # IN_MEETING は Bot が実際に参加ボタンをクリックした時に
+            # /api/bot/{session_id}/joining コールバックで設定される
             session.updated_at = datetime.utcnow()
 
             logger.info(
                 f"✅ ACA Job execution 開始: execution_name={execution.name}, "
-                f"session_id={session.id}"
+                f"session_id={session.id} (status=JOINING, コンテナ起動待ち)"
             )
 
         except Exception as e:
