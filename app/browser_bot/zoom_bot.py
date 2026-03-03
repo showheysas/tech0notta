@@ -25,6 +25,7 @@ SELECTORS = {
     # 名前入力フィールド
     "name_input": (
         'input#inputname, '
+        'input#input-for-name, '
         'input[placeholder="Your Name"], '
         'input[placeholder="Your name"], '
         'input[placeholder="お名前"], '
@@ -352,8 +353,25 @@ class ZoomBot:
                 SELECTORS["join_button"], timeout=30000
             )
             if join_btn and join_btn.is_visible():
-                join_btn.click()
-                logger.info("✅ 参加ボタンクリック完了")
+                # ボタンが enabled になるまで待つ（名前入力後に有効化される）
+                try:
+                    page.wait_for_function(
+                        """() => {
+                            const btn = document.querySelector('button.preview-join-button, button#joinBtn');
+                            return btn && !btn.classList.contains('disabled') && !btn.disabled;
+                        }""",
+                        timeout=10000
+                    )
+                except PlaywrightTimeoutError:
+                    logger.warning("⚠️ Joinボタンが disabled のまま、強制クリックを試みます")
+
+                # preview-meeting-info がクリックを遮るため JavaScript で直接クリック
+                page.evaluate("""() => {
+                    const btn = document.querySelector('button.preview-join-button') ||
+                                document.querySelector('button#joinBtn');
+                    if (btn) btn.click();
+                }""")
+                logger.info("✅ 参加ボタンクリック完了（JS click）")
                 time.sleep(3)
         except PlaywrightTimeoutError:
             logger.error("❌ 参加ボタンが見つかりませんでした")
