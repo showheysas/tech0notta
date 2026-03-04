@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Set
 from datetime import datetime, date, timedelta
 
 from app.database import get_db
 from app.models.job import Job, JobStatus
+from app.models.user import User
+from app.auth import get_current_user, get_authorized_project_ids
 from app.timezone import jst_now
 from pydantic import BaseModel, Field
 import logging
@@ -112,7 +114,10 @@ class JobStatsResponse(BaseModel):
 # --- Endpoints ---
 
 @router.get("/stats", response_model=JobStatsResponse)
-def get_job_stats(db: Session = Depends(get_db)):
+def get_job_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     ダッシュボード用統計情報を取得
     """
@@ -145,22 +150,24 @@ def list_jobs(
     skip: int = 0,
     limit: int = 20,
     status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    authorized_ids: Optional[Set[str]] = Depends(get_authorized_project_ids),
+    db: Session = Depends(get_db),
 ):
     """
     ジョブ一覧を取得 (作成日時降順)
+    管理者は全件、一般ユーザーは所属案件のジョブのみ。
     """
     query = db.query(Job)
-    
+
     # ステータスフィルター
     if status:
         query = query.filter(Job.status == status)
-    
+
     jobs = query.order_by(Job.created_at.desc()).offset(skip).limit(limit).all()
-    
+
     # TRANSCRIBING状態のジョブがあれば、ステータスを更新する
     from app.services.transcription_service import check_and_update_transcription_status
-    
+
     for job in jobs:
         if job.status == JobStatus.TRANSCRIBING.value:
             try:
@@ -168,7 +175,16 @@ def list_jobs(
             except Exception as e:
                 logger.warning(f"Failed to auto-update status for job {job.job_id}: {e}")
 
-    return [JobResponse.from_job(job) for job in jobs]
+    result = [JobResponse.from_job(job) for job in jobs]
+
+    # 認可フィルタ（None=管理者=全件）
+    if authorized_ids is not None:
+        result = [
+            j for j in result
+            if j.metadata and j.metadata.project_id and j.metadata.project_id in authorized_ids
+        ]
+
+    return result
 
 
 # --- 顧客・議事録紐付け ---
@@ -181,7 +197,8 @@ class JobCustomerUpdate(BaseModel):
 def update_job_customer(
     job_id: str,
     data: JobCustomerUpdate,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     議事録の顧客紐付けを更新する
@@ -219,7 +236,8 @@ class ExtractMetadataResponse(BaseModel):
 async def extract_metadata(
     job_id: str,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     議事録からメタデータとタスクを自動抽出する
@@ -332,7 +350,8 @@ class JobUpdateRequest(BaseModel):
 def update_job(
     job_id: str,
     data: JobUpdateRequest,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     議事録の内容を更新する
@@ -615,7 +634,8 @@ async def approve_job(
     job_id: str,
     request: JobApproveRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     議事録を承認する
@@ -677,6 +697,7 @@ async def debug_notion_task_config():
         "notion_task_db_id_set": bool(settings.NOTION_TASK_DB_ID),
         "notion_task_db_id_value": settings.NOTION_TASK_DB_ID[:8] + "..." if settings.NOTION_TASK_DB_ID else "(empty)",
         "notion_project_db_id_set": bool(settings.NOTION_PROJECT_DB_ID),
+        "notion_user_db_id_set": bool(settings.NOTION_USER_DB_ID),
     }
 
     # NotionTaskService の状態確認
@@ -701,7 +722,11 @@ async def debug_notion_task_config():
 # 注意: このエンドポイントは必ず /stats や他の固定パスエンドポイントの後に定義する
 # そうしないと job_id として "stats" がマッチしてしまう
 @router.get("/{job_id}", response_model=JobResponse)
-def get_job(job_id: str, db: Session = Depends(get_db)):
+def get_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     特定ジョブの詳細を取得
     """

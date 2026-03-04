@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from app.models.customer import CustomerCreate, CustomerUpdate, CustomerResponse
+from app.models.user import User
+from app.auth import get_current_user
 from app.services.crm_service import get_crm_service
 import logging
 
@@ -10,7 +12,10 @@ router = APIRouter(prefix="/api/customers", tags=["customers"])
 
 
 @router.post("", response_model=CustomerResponse)
-async def create_customer(data: CustomerCreate):
+async def create_customer(
+    data: CustomerCreate,
+    current_user: User = Depends(get_current_user),
+):
     """
     顧客を作成する
 
@@ -26,7 +31,9 @@ async def create_customer(data: CustomerCreate):
 
 
 @router.get("", response_model=List[CustomerResponse])
-async def list_customers():
+async def list_customers(
+    current_user: User = Depends(get_current_user),
+):
     """
     顧客一覧を取得する
     """
@@ -35,7 +42,10 @@ async def list_customers():
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
-async def get_customer(customer_id: str):
+async def get_customer(
+    customer_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """
     顧客詳細を取得する（関連議事録・タスク含む）
     """
@@ -44,7 +54,11 @@ async def get_customer(customer_id: str):
 
 
 @router.put("/{customer_id}", response_model=CustomerResponse)
-async def update_customer(customer_id: str, data: CustomerUpdate):
+async def update_customer(
+    customer_id: str,
+    data: CustomerUpdate,
+    current_user: User = Depends(get_current_user),
+):
     """
     顧客情報を更新する
     """
@@ -53,7 +67,10 @@ async def update_customer(customer_id: str, data: CustomerUpdate):
 
 
 @router.delete("/{customer_id}")
-async def delete_customer(customer_id: str):
+async def delete_customer(
+    customer_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """
     顧客を削除する
     """

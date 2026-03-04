@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     NOTION_DEAL_DB_ID: str = ""
     NOTION_TASK_DB_ID: str = ""
     NOTION_PROJECT_DB_ID: str = ""
+    NOTION_USER_DB_ID: str = ""        # ユーザー情報DB ID（認可用）
 
     # Slack
     SLACK_BOT_TOKEN: str | None = None

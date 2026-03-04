@@ -343,7 +343,14 @@ class NotionService:
                 end_prop = props.get("案件終了日", {})
                 if end_prop.get("date"):
                     project["end_date"] = end_prop["date"].get("start", "")
-                
+
+                # メンバー（リレーション）- 認可用
+                member_prop = props.get("メンバー", {})
+                if member_prop.get("relation"):
+                    project["member_ids"] = [r["id"] for r in member_prop["relation"]]
+                else:
+                    project["member_ids"] = []
+
                 projects.append(project)
             
             logger.info(f"Listed {len(projects)} projects from Notion")

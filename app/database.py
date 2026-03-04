@@ -38,6 +38,7 @@ def init_db():
     _ensure_jobs_columns()
     _ensure_chat_tables()
     _ensure_metadata_columns()  # MVP新機能用カラム追加
+    _ensure_users_columns()     # 認可用カラム追加
 
 
 def _ensure_jobs_columns():
@@ -87,6 +88,20 @@ def _ensure_metadata_columns():
     if "meeting_date" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE jobs ADD COLUMN meeting_date DATE"))
+
+
+def _ensure_users_columns():
+    """認可用カラムをusersテーブルに追加"""
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("users")}
+    if "email" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
+    if "notion_user_page_id" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN notion_user_page_id VARCHAR(36)"))
 
 
 def _ensure_chat_tables():

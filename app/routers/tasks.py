@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException, Query
-from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import List, Optional, Set
 from datetime import date
 from app.models.task import (
     TaskExtractRequest,
@@ -13,6 +13,8 @@ from app.models.task import (
     TaskStatus,
     TaskPriority,
 )
+from app.models.user import User
+from app.auth import get_current_user, get_authorized_project_ids
 from app.services.task_service import get_task_service
 import logging
 
@@ -25,7 +27,10 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
 @router.post("/extract", response_model=TaskExtractResponse)
-async def extract_tasks(request: TaskExtractRequest):
+async def extract_tasks(
+    request: TaskExtractRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     議事録からタスクを自動抽出する
 
@@ -36,7 +41,10 @@ async def extract_tasks(request: TaskExtractRequest):
 
 
 @router.post("/decompose", response_model=TaskDecomposeResponse)
-async def decompose_task(request: TaskDecomposeRequest):
+async def decompose_task(
+    request: TaskDecomposeRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     抽象的なタスクを具体的なサブタスクに分解する
 
@@ -47,7 +55,10 @@ async def decompose_task(request: TaskDecomposeRequest):
 
 
 @router.post("/register", response_model=TaskRegisterResponse)
-async def register_tasks(request: TaskRegisterRequest):
+async def register_tasks(
+    request: TaskRegisterRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     承認されたタスクをNotion Task DBに登録する
     """
@@ -68,12 +79,14 @@ async def list_tasks(
     due_date_to: Optional[date] = Query(None, description="期限終了日"),
     sort_by: str = Query("due_date", description="ソートキー"),
     sort_order: str = Query("asc", description="ソート順（asc/desc）"),
+    authorized_ids: Optional[Set[str]] = Depends(get_authorized_project_ids),
 ):
     """
     タスク一覧を取得する（フィルター・ソート対応）
+    管理者は全件、一般ユーザーは所属案件のタスクのみ。
     """
     service = get_task_service()
-    return await service.get_tasks(
+    tasks = await service.get_tasks(
         project_id=project_id,
         assignee=assignee,
         status=status,
@@ -84,9 +97,21 @@ async def list_tasks(
         sort_order=sort_order,
     )
 
+    # 認可フィルタ（None=管理者=全件）
+    if authorized_ids is not None:
+        tasks = [
+            t for t in tasks
+            if t.project_id and t.project_id in authorized_ids
+        ]
+
+    return tasks
+
 
 @router.get("/{task_id}", response_model=TaskResponse)
-async def get_task(task_id: str):
+async def get_task(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """
     タスク詳細を取得する
     """
@@ -95,7 +120,11 @@ async def get_task(task_id: str):
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
-async def update_task(task_id: str, data: TaskUpdate):
+async def update_task(
+    task_id: str,
+    data: TaskUpdate,
+    current_user: User = Depends(get_current_user),
+):
     """
     タスクを更新する
 
@@ -107,7 +136,10 @@ async def update_task(task_id: str, data: TaskUpdate):
 
 
 @router.delete("/{task_id}")
-async def delete_task(task_id: str):
+async def delete_task(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """
     タスクを削除する
     """

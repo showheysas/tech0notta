@@ -5,10 +5,12 @@ Notion案件DBとの連携を担当する。
 - 案件一覧取得（Notionから直接取得）
 - 案件作成
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Set
 from app.services.notion_client import get_notion_service
+from app.auth import get_current_user, get_authorized_project_ids
+from app.models.user import User
 import logging
 
 logger = logging.getLogger(__name__)
@@ -50,15 +52,21 @@ class ProjectCreateRequest(BaseModel):
 
 
 @router.get("", response_model=List[ProjectResponse])
-async def list_projects():
+async def list_projects(
+    authorized_ids: Optional[Set[str]] = Depends(get_authorized_project_ids),
+):
     """
     Notion案件DBから案件一覧を取得する。
-    議事録作成時の案件選択に使用。
+    管理者は全件、一般ユーザーは所属案件のみ。
     """
     try:
         notion = get_notion_service()
         projects = await notion.list_projects()
-        
+
+        # 認可フィルタ（None=管理者=全件）
+        if authorized_ids is not None:
+            projects = [p for p in projects if p["id"] in authorized_ids]
+
         return [
             ProjectResponse(
                 id=p["id"],
@@ -80,20 +88,23 @@ async def list_projects():
 
 
 @router.post("", response_model=ProjectResponse)
-async def create_project(request: ProjectCreateRequest):
+async def create_project(
+    request: ProjectCreateRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Notion案件DBに案件を作成する
     """
     if not request.name or not request.name.strip():
         raise HTTPException(status_code=400, detail="案件名は必須です")
-    
+
     try:
         notion = get_notion_service()
         result = await notion.create_project_record(request.model_dump(exclude_none=True))
-        
+
         if not result:
             raise HTTPException(status_code=500, detail="案件の作成に失敗しました（Notion未設定）")
-        
+
         return ProjectResponse(
             id=result["id"],
             name=result.get("name", request.name),

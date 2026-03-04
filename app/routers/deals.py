@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from app.models.deal import DealCreate, DealUpdate, DealResponse, DealStatus
+from app.models.user import User
+from app.auth import get_current_user
 from app.services.crm_service import get_crm_service
 import logging
 
@@ -10,7 +12,10 @@ router = APIRouter(prefix="/api/deals", tags=["deals"])
 
 
 @router.post("", response_model=DealResponse)
-async def create_deal(data: DealCreate):
+async def create_deal(
+    data: DealCreate,
+    current_user: User = Depends(get_current_user),
+):
     """
     商談を作成する
 
@@ -29,6 +34,7 @@ async def create_deal(data: DealCreate):
 async def list_deals(
     customer_id: Optional[str] = Query(None, description="顧客IDでフィルター"),
     status: Optional[DealStatus] = Query(None, description="ステータスでフィルター"),
+    current_user: User = Depends(get_current_user),
 ):
     """
     商談一覧を取得する（フィルター対応）
@@ -38,7 +44,10 @@ async def list_deals(
 
 
 @router.get("/{deal_id}", response_model=DealResponse)
-async def get_deal(deal_id: str):
+async def get_deal(
+    deal_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """
     商談詳細を取得する
     """
@@ -47,7 +56,11 @@ async def get_deal(deal_id: str):
 
 
 @router.put("/{deal_id}", response_model=DealResponse)
-async def update_deal(deal_id: str, data: DealUpdate):
+async def update_deal(
+    deal_id: str,
+    data: DealUpdate,
+    current_user: User = Depends(get_current_user),
+):
     """
     商談を更新する
 
@@ -58,7 +71,10 @@ async def update_deal(deal_id: str, data: DealUpdate):
 
 
 @router.delete("/{deal_id}")
-async def delete_deal(deal_id: str):
+async def delete_deal(
+    deal_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """
     商談を削除する
     """

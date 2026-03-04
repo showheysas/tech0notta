@@ -2,6 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.auth import get_current_user
+from app.models.user import User
 from app.schemas.chat import (
     ChatSessionCreate,
     ChatSessionResponse,
@@ -29,7 +31,8 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 @router.post("/sessions", response_model=ChatSessionResponse)
 async def create_chat_session(
     request: ChatSessionCreate,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """チャットセッションを作成"""
     try:
@@ -56,7 +59,8 @@ async def create_chat_session(
 async def send_chat_message(
     session_id: str,
     request: ChatMessageCreate,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """チャットメッセージを送信（リライト実行）"""
     try:
@@ -120,7 +124,8 @@ async def send_chat_message(
 @router.get("/sessions/{session_id}/messages", response_model=ChatHistoryResponse)
 async def get_chat_history(
     session_id: str,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """チャット履歴を取得"""
     try:
@@ -152,7 +157,8 @@ async def get_chat_history(
 @router.get("/sessions", response_model=ChatSessionListResponse)
 async def list_chat_sessions(
     job_id: str = None,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """セッション一覧を取得"""
     try:

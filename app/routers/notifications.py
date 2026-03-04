@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.auth import get_current_user
+from app.models.user import User
 from app.models.notification import (
     MeetingApprovedNotification,
     TaskAssignedNotification,
@@ -16,6 +18,7 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 @router.post("/meeting-approved", response_model=NotificationResponse)
 async def send_meeting_approved_notification(
     notification: MeetingApprovedNotification,
+    current_user: User = Depends(get_current_user),
 ):
     """
     議事録承認通知をSlackプロジェクトチャネルに送信する
@@ -29,6 +32,7 @@ async def send_meeting_approved_notification(
 @router.post("/task-assigned", response_model=NotificationResponse)
 async def send_task_assigned_notification(
     notification: TaskAssignedNotification,
+    current_user: User = Depends(get_current_user),
 ):
     """
     タスク割り当て通知を担当者にSlack DMで送信する
@@ -40,7 +44,9 @@ async def send_task_assigned_notification(
 
 
 @router.get("/batch/reminder", response_model=ReminderBatchResponse)
-async def run_reminder_batch():
+async def run_reminder_batch(
+    current_user: User = Depends(get_current_user),
+):
     """
     リマインダーバッチを実行する
 
