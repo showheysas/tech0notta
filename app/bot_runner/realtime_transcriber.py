@@ -10,8 +10,11 @@ import time
 import logging
 import threading
 import queue
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional
+
+# JST (UTC+9) タイムゾーン
+JST = timezone(timedelta(hours=9))
 
 try:
     import azure.cognitiveservices.speech as speechsdk
@@ -171,7 +174,7 @@ class RealtimeTranscriber:
                     "speaker": speaker_label,
                     "speaker_id": speaker_id,  # 元のIDも保存（マッピング用）
                     "text": text,
-                    "time": datetime.now().strftime("%H:%M")
+                    "time": datetime.now(JST).strftime("%H:%M")
                 })
     
     def _on_transcribing(self, evt: speechsdk.transcription.ConversationTranscriptionEventArgs) -> None:

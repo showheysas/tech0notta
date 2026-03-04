@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
+from app.timezone import jst_now
 from app.zoom_config import zoom_config
 from app.services.zoom_api_service import zoom_api_service
 
@@ -324,5 +325,5 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "zoom-webhook",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": jst_now().isoformat()
     }

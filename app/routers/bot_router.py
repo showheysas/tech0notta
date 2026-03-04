@@ -8,6 +8,8 @@ from typing import Optional
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
+
+from app.timezone import jst_now
 from pydantic import BaseModel
 
 from app.services.bot_service import bot_service, BotStatus, BotPlatform
@@ -145,7 +147,7 @@ async def bot_joining(session_id: str):
     session = bot_service.get_session(session_id)
     if session and session.status not in (BotStatus.COMPLETED, BotStatus.ERROR):
         session.status = BotStatus.IN_MEETING
-        session.updated_at = datetime.utcnow()
+        session.updated_at = jst_now()
         logger.info(f"🔔 Bot参加ボタンクリック通知 → IN_MEETING: session_id={session_id}")
     return {"success": True}
 
@@ -170,7 +172,7 @@ async def complete_bot_session(session_id: str, request: CompleteBotRequest = No
         else:
             session.status = BotStatus.COMPLETED
             logger.info(f"✅ Bot自然終了を記録: session_id={session_id}")
-        session.updated_at = datetime.utcnow()
+        session.updated_at = jst_now()
     return {"success": True, "message": "状態を更新しました"}
 
 

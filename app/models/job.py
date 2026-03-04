@@ -4,6 +4,7 @@ from sqlalchemy.sql import func
 from datetime import datetime
 from enum import Enum
 from app.database import Base
+from app.timezone import jst_now
 
 
 class JobStatus(str, Enum):
@@ -37,8 +38,8 @@ class Job(Base):
     notion_page_id = Column(String(255), nullable=True)
     notion_page_url = Column(String(512), nullable=True)
     error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=jst_now, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=jst_now, onupdate=jst_now)
     duration = Column(Integer, nullable=True)  # 秒単位
     last_viewed_at = Column(DateTime(timezone=True), nullable=True)
     

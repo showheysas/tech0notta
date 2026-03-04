@@ -6,6 +6,7 @@ Notion Customer DB / Deal DBとの連携を担当します。
 from typing import List, Optional
 from datetime import date, datetime
 from fastapi import HTTPException
+from app.timezone import jst_now
 from app.models.customer import CustomerCreate, CustomerUpdate, CustomerResponse
 from app.models.deal import DealCreate, DealUpdate, DealResponse, DealStatus
 from app.config import settings
@@ -38,7 +39,7 @@ class CRMService:
         return did
 
     async def create_customer(self, data: CustomerCreate) -> CustomerResponse:
-        now = datetime.utcnow()
+        now = jst_now()
         cid = self._generate_customer_id()
         record = {
             "id": cid,
@@ -81,7 +82,7 @@ class CRMService:
             record["address"] = data.address
         if data.notes is not None:
             record["notes"] = data.notes
-        record["updated_at"] = datetime.utcnow()
+        record["updated_at"] = jst_now()
         logger.info(f"Customer updated: {customer_id}")
         return self._to_customer_response(record)
 
@@ -111,7 +112,7 @@ class CRMService:
         # 顧客存在チェック
         if data.customer_id not in self._customers:
             raise HTTPException(status_code=400, detail="指定された顧客が見つかりません")
-        now = datetime.utcnow()
+        now = jst_now()
         did = self._generate_deal_id()
         record = {
             "id": did,
@@ -163,7 +164,7 @@ class CRMService:
             # 成約・失注時にclose_dateを自動設定
             if data.status in (DealStatus.WON, DealStatus.LOST):
                 record["close_date"] = date.today()
-        record["updated_at"] = datetime.utcnow()
+        record["updated_at"] = jst_now()
         logger.info(f"Deal updated: {deal_id}")
         return self._to_deal_response(record)
 

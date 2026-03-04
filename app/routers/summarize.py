@@ -8,6 +8,8 @@ import logging
 from datetime import datetime, date
 import json
 
+from app.timezone import jst_now
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["summarize"])
@@ -28,7 +30,7 @@ async def extract_metadata_background(job_id: str, db: Session):
         
         # ステータスを更新
         job.status = JobStatus.EXTRACTING_METADATA.value
-        job.updated_at = datetime.utcnow()
+        job.updated_at = jst_now()
         db.commit()
         
         # メタデータ抽出
@@ -89,7 +91,7 @@ async def extract_metadata_background(job_id: str, db: Session):
         job.extracted_tasks = json.dumps(tasks_list, ensure_ascii=False)
         job.meeting_date = meeting_date
         job.status = JobStatus.REVIEWING.value
-        job.updated_at = datetime.utcnow()
+        job.updated_at = jst_now()
         db.commit()
         
         logger.info(f"Metadata and tasks extracted for job {job_id} in background")
@@ -102,7 +104,7 @@ async def extract_metadata_background(job_id: str, db: Session):
                 # エラーでもSUMMARIZEDに戻す（手動でメタデータ抽出を再実行可能）
                 job.status = JobStatus.SUMMARIZED.value
                 job.error_message = f"メタデータ抽出エラー: {str(e)}"
-                job.updated_at = datetime.utcnow()
+                job.updated_at = jst_now()
                 db.commit()
         except:
             pass
@@ -139,7 +141,7 @@ async def summarize_transcription(
 
         job.summary = summary
         job.status = JobStatus.SUMMARIZED.value
-        job.updated_at = datetime.utcnow()
+        job.updated_at = jst_now()
         db.commit()
         db.refresh(job)
         

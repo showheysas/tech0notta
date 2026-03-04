@@ -1,8 +1,11 @@
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from notion_client import AsyncClient
 from app.zoom_notion_config import notion_settings
+
+# JST (UTC+9) タイムゾーン
+_JST = timezone(timedelta(hours=9))
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +65,7 @@ class ZoomNotionService:
                 },
                 "会議日": {
                     "date": {
-                        "start": datetime.now().date().isoformat()
+                        "start": datetime.now(_JST).date().isoformat()
                     }
                 },
                 "検索ワード": {

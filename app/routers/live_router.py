@@ -9,6 +9,8 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, File, UploadFile, Form, Depends, BackgroundTasks
+
+from app.timezone import jst_now
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -392,14 +394,14 @@ async def auto_summarize_background(job_id: str):
 
         # 要約生成
         job.status = JobStatus.SUMMARIZING.value
-        job.updated_at = datetime.utcnow()
+        job.updated_at = jst_now()
         db.commit()
 
         summary = get_azure_openai_service().generate_summary(job.transcription)
 
         job.summary = summary
         job.status = JobStatus.SUMMARIZED.value
-        job.updated_at = datetime.utcnow()
+        job.updated_at = jst_now()
         db.commit()
         db.refresh(job)
 
@@ -414,7 +416,7 @@ async def auto_summarize_background(job_id: str):
             job = db.query(Job).filter(Job.job_id == job_id).first()
             if job and job.status in (JobStatus.SUMMARIZING.value,):
                 job.status = JobStatus.TRANSCRIBED.value
-                job.updated_at = datetime.utcnow()
+                job.updated_at = jst_now()
                 db.commit()
         except Exception:
             pass

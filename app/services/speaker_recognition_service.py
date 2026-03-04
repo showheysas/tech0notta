@@ -12,6 +12,8 @@ from datetime import datetime
 import threading
 import queue
 
+from app.timezone import jst_now
+
 import azure.cognitiveservices.speech as speechsdk
 
 from app.config import settings
@@ -29,7 +31,7 @@ class SpeakerRecognizer:
     recognizer: Optional[speechsdk.SpeechRecognizer] = None
     push_stream: Optional[speechsdk.audio.PushAudioInputStream] = None
     is_running: bool = False
-    last_activity: datetime = field(default_factory=datetime.utcnow)
+    last_activity: datetime = field(default_factory=jst_now)
 
 
 class SpeakerAudioRecognitionService:
@@ -68,7 +70,7 @@ class SpeakerAudioRecognitionService:
                 self._create_recognizer(user_id, user_name)
             
             recognizer = self._recognizers[user_id]
-            recognizer.last_activity = datetime.utcnow()
+            recognizer.last_activity = jst_now()
             
             # PushStreamに音声データを送信
             if recognizer.push_stream:

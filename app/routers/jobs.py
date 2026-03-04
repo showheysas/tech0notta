@@ -6,6 +6,7 @@ from datetime import datetime, date, timedelta
 
 from app.database import get_db
 from app.models.job import Job, JobStatus
+from app.timezone import jst_now
 from pydantic import BaseModel, Field
 import logging
 import json
@@ -244,7 +245,7 @@ async def extract_metadata(
     try:
         # ステータスを更新
         job.status = JobStatus.EXTRACTING_METADATA.value
-        job.updated_at = datetime.utcnow()
+        job.updated_at = jst_now()
         db.commit()
         
         # メタデータ抽出
@@ -291,7 +292,7 @@ async def extract_metadata(
         job.extracted_tasks = json.dumps(tasks_list, ensure_ascii=False)
         job.meeting_date = meeting_date
         job.status = JobStatus.REVIEWING.value
-        job.updated_at = datetime.utcnow()
+        job.updated_at = jst_now()
         db.commit()
         
         logger.info(f"Metadata and tasks extracted for job {job_id}")
@@ -310,7 +311,7 @@ async def extract_metadata(
         logger.error(f"Error extracting metadata for job {job_id}: {e}")
         job.status = JobStatus.FAILED.value
         job.error_message = str(e)
-        job.updated_at = datetime.utcnow()
+        job.updated_at = jst_now()
         db.commit()
         raise HTTPException(
             status_code=500,
@@ -375,7 +376,7 @@ def update_job(
         tasks_list = [t.model_dump() for t in data.extracted_tasks]
         job.extracted_tasks = json.dumps(tasks_list, ensure_ascii=False)
     
-    job.updated_at = datetime.utcnow()
+    job.updated_at = jst_now()
     db.commit()
     db.refresh(job)
     
@@ -577,7 +578,7 @@ async def process_approval_background(
         
         # ステータスを完了に更新
         job.status = JobStatus.COMPLETED.value
-        job.updated_at = datetime.utcnow()
+        job.updated_at = jst_now()
         db.commit()
         
         logger.info(f"Approval processing completed for job {job_id}: {tasks_registered} tasks, {notifications_sent} notifications")
@@ -589,7 +590,7 @@ async def process_approval_background(
             if job:
                 job.status = JobStatus.FAILED.value
                 job.error_message = str(e)
-                job.updated_at = datetime.utcnow()
+                job.updated_at = jst_now()
                 db.commit()
         except:
             pass
@@ -629,7 +630,7 @@ async def approve_job(
     
     # ステータスを更新
     job.status = JobStatus.CREATING_NOTION.value
-    job.updated_at = datetime.utcnow()
+    job.updated_at = jst_now()
     db.commit()
     
     # メタデータからproject_idを取得（リクエストで未指定の場合）

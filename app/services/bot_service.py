@@ -11,6 +11,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
+from app.timezone import jst_now
 from app.zoom_config import zoom_config
 
 logger = logging.getLogger(__name__)
@@ -159,7 +160,7 @@ class BotService:
 
         # セッション作成
         session_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = jst_now()
 
         session = BotSession(
             id=session_id,
@@ -191,7 +192,7 @@ class BotService:
         """
         try:
             session.status = BotStatus.JOINING
-            session.updated_at = datetime.utcnow()
+            session.updated_at = jst_now()
 
             logger.info(
                 f"🚀 ACA Job起動開始: session_id={session.id}, "
@@ -265,7 +266,7 @@ class BotService:
             # ステータスは JOINING のまま維持
             # IN_MEETING は Bot が実際に参加ボタンをクリックした時に
             # /api/bot/{session_id}/joining コールバックで設定される
-            session.updated_at = datetime.utcnow()
+            session.updated_at = jst_now()
 
             logger.info(
                 f"✅ ACA Job execution 開始: execution_name={execution.name}, "
@@ -276,7 +277,7 @@ class BotService:
             logger.error(f"ACA Job起動エラー: {e}")
             session.status = BotStatus.ERROR
             session.error_message = str(e)
-            session.updated_at = datetime.utcnow()
+            session.updated_at = jst_now()
 
     def get_session(self, session_id: str) -> Optional[BotSession]:
         """セッション取得"""
@@ -316,7 +317,7 @@ class BotService:
             return False
 
         session.status = BotStatus.LEAVING
-        session.updated_at = datetime.utcnow()
+        session.updated_at = jst_now()
 
         logger.info(f"🛑 Bot退出開始: session_id={session_id}")
 
@@ -340,7 +341,7 @@ class BotService:
                 logger.error(f"ACA execution 停止エラー: {e}")
 
         session.status = BotStatus.COMPLETED
-        session.updated_at = datetime.utcnow()
+        session.updated_at = jst_now()
 
         logger.info(f"✅ Bot退出完了: session_id={session_id}")
         return True

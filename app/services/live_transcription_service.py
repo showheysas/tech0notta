@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import Dict, List, Optional
 import uuid
 
+from app.timezone import jst_now
+
 logger = logging.getLogger(__name__)
 
 
@@ -98,7 +100,7 @@ class LiveTranscriptionService:
             session_id=session_id,
             meeting_id=meeting_id,
             meeting_topic=meeting_topic or f"会議 {meeting_id}",
-            started_at=datetime.utcnow()
+            started_at=jst_now()
         )
         self._sessions[session_id] = session
         self._speaker_colors[session_id] = {}
@@ -154,7 +156,7 @@ class LiveTranscriptionService:
             logger.warning(f"セッションが見つかりません: {session_id}")
             return None
         
-        now = datetime.utcnow()
+        now = jst_now()
         
         # 話者マッピングがあれば適用
         display_speaker = speaker
