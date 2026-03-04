@@ -129,6 +129,18 @@ class GoogleMeetBot:
                     f"--use-file-for-fake-audio-capture={fake_audio}",
                     "--disable-features=WebRtcHideLocalIpsWithMdns",
                     "--disable-blink-features=AutomationControlled",
+                    # パフォーマンス最適化フラグ（起動・参加時間短縮）
+                    "--disable-gpu",
+                    "--disable-software-rasterizer",
+                    "--no-first-run",
+                    "--disable-extensions",
+                    "--disable-default-apps",
+                    "--disable-background-networking",
+                    "--disable-sync",
+                    "--disable-translate",
+                    "--disable-hang-monitor",
+                    "--metrics-recording-only",
+                    "--safebrowsing-disable-auto-update",
                 ]
             )
             context = browser.new_context(
@@ -191,12 +203,12 @@ class GoogleMeetBot:
     def _handle_guest_option(self, page):
         """「ゲストとして続行」ボタンがあればクリック（サインイン促進画面をスキップ）"""
         try:
-            btn = page.wait_for_selector(SELECTORS["guest_option"], timeout=10000)
+            btn = page.wait_for_selector(SELECTORS["guest_option"], timeout=5000)
             if btn and btn.is_visible():
                 btn.click()
                 logger.info("👤 ゲストオプションを選択")
-                page.wait_for_load_state("networkidle", timeout=10000)
-                time.sleep(2)
+                page.wait_for_load_state("domcontentloaded", timeout=5000)
+                time.sleep(1)
         except PlaywrightTimeoutError:
             logger.info("ゲストオプションなし（既にゲスト画面 or ログイン済み）、スキップ")
 
@@ -221,7 +233,6 @@ class GoogleMeetBot:
                 if btn and btn.is_visible():
                     btn.click()
                     logger.info(f"🔇 {label}をオフに設定")
-                    time.sleep(0.5)
             except PlaywrightTimeoutError:
                 logger.debug(f"{label}ボタン未検出（既にオフの可能性）")
             except Exception as e:
@@ -249,7 +260,7 @@ class GoogleMeetBot:
                 join_btn.click()
                 logger.info("✅ 参加ボタンクリック完了")
                 self._notify_joining()
-                time.sleep(3)  # 参加処理の待機
+                time.sleep(1)  # 参加処理の待機
         except PlaywrightTimeoutError:
             logger.error("❌ 参加ボタンが見つかりませんでした")
             raise
@@ -262,7 +273,6 @@ class GoogleMeetBot:
             if btn and btn.is_visible():
                 btn.click()
                 logger.info("🔇 会議参加後にマイクをミュート完了")
-                time.sleep(0.5)
             else:
                 logger.info("🔇 会議参加後マイク: 既にミュート済み")
         except PlaywrightTimeoutError:

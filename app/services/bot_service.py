@@ -74,16 +74,31 @@ class BotService:
     def _get_aca_client(self):
         """Azure Container Apps API クライアントを取得（遅延初期化）"""
         if self._aca_client is None:
-            from azure.identity import DefaultAzureCredential
-            from azure.mgmt.appcontainers import ContainerAppsAPIClient
             from app.config import settings
 
-            credential = DefaultAzureCredential()
+            # ManagedIdentityCredential を直接使用（DefaultAzureCredential の
+            # 複数プロバイダー試行をスキップし、トークン取得を高速化）
+            try:
+                from azure.identity import ManagedIdentityCredential
+                credential = ManagedIdentityCredential()
+            except Exception:
+                from azure.identity import DefaultAzureCredential
+                credential = DefaultAzureCredential()
+
+            from azure.mgmt.appcontainers import ContainerAppsAPIClient
             self._aca_client = ContainerAppsAPIClient(
                 credential=credential,
                 subscription_id=settings.AZURE_SUBSCRIPTION_ID,
             )
         return self._aca_client
+
+    def warmup(self):
+        """アプリ起動時にACAクライアントとトークンを事前取得"""
+        try:
+            self._get_aca_client()
+            logger.info("🔥 ACA クライアント事前初期化完了")
+        except Exception as e:
+            logger.warning(f"ACA クライアント事前初期化スキップ: {e}")
 
     def _parse_meeting_url(self, url_or_id: str) -> tuple[str, Optional[str]]:
         """

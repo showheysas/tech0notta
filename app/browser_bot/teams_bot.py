@@ -69,6 +69,17 @@ class TeamsBot:
                     "--disable-setuid-sandbox",
                     "--use-fake-device-for-media-stream",
                     "--disable-blink-features=AutomationControlled",
+                    "--disable-gpu",
+                    "--disable-software-rasterizer",
+                    "--no-first-run",
+                    "--disable-extensions",
+                    "--disable-default-apps",
+                    "--disable-background-networking",
+                    "--disable-sync",
+                    "--disable-translate",
+                    "--disable-hang-monitor",
+                    "--metrics-recording-only",
+                    "--safebrowsing-disable-auto-update",
                 ]
             )
             context = browser.new_context(
@@ -94,7 +105,7 @@ class TeamsBot:
 
             try:
                 logger.info(f"🌐 Teams 会議URLに移動: {self.meeting_url}")
-                page.goto(self.meeting_url, wait_until="networkidle", timeout=30000)
+                page.goto(self.meeting_url, wait_until="domcontentloaded", timeout=30000)
 
                 # 「Webで参加」を選択（アプリダウンロード画面をスキップ）
                 self._click_join_on_web(page)
@@ -126,7 +137,7 @@ class TeamsBot:
             if web_btn:
                 web_btn.click()
                 logger.info("🌐 Webで参加を選択")
-                time.sleep(2)
+                time.sleep(1)
         except PlaywrightTimeoutError:
             logger.info("Webで参加ボタンなし、続行")
 
@@ -153,7 +164,6 @@ class TeamsBot:
                     if pressed == "true":
                         btn.click()
                         logger.info(f"🔇 {label}をオフに設定")
-                        time.sleep(0.5)
             except Exception as e:
                 logger.debug(f"{label}オフ設定スキップ: {e}")
 
@@ -179,7 +189,7 @@ class TeamsBot:
                 join_btn.click()
                 logger.info("✅ 参加ボタンクリック完了")
                 self._notify_joining()
-                time.sleep(3)
+                time.sleep(1)
         except PlaywrightTimeoutError:
             logger.error("❌ 参加ボタンが見つかりませんでした")
             raise

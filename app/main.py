@@ -58,6 +58,10 @@ async def startup_event():
     init_db()
     logger.info("Database initialized")
 
+    # ACA クライアントを事前初期化（初回Bot派遣のトークン取得を高速化）
+    from app.services.bot_service import bot_service
+    bot_service.warmup()
+
 
 @app.get("/")
 async def root():

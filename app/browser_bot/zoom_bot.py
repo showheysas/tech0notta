@@ -228,7 +228,7 @@ class ZoomBot:
                 )
                 logger.info(f"☁️ Cloudflareチャレンジ通過 → Title: {page.title()}")
                 page.wait_for_load_state("load", timeout=30000)
-                time.sleep(3)
+                time.sleep(1)
         except PlaywrightTimeoutError:
             logger.warning("☁️ Cloudflareチャレンジ解決タイムアウト（60秒）、続行を試みます")
 
@@ -253,6 +253,17 @@ class ZoomBot:
                     "--disable-blink-features=AutomationControlled",
                     "--disable-dev-shm-usage",
                     "--window-size=1280,720",
+                    "--disable-gpu",
+                    "--disable-software-rasterizer",
+                    "--no-first-run",
+                    "--disable-extensions",
+                    "--disable-default-apps",
+                    "--disable-background-networking",
+                    "--disable-sync",
+                    "--disable-translate",
+                    "--disable-hang-monitor",
+                    "--metrics-recording-only",
+                    "--safebrowsing-disable-auto-update",
                 ]
             )
             context = browser.new_context(
@@ -330,7 +341,7 @@ class ZoomBot:
                 link.click()
                 logger.info("🌐 ブラウザから参加を選択")
                 page.wait_for_load_state("load", timeout=30000)
-                time.sleep(3)
+                time.sleep(1)
         except PlaywrightTimeoutError:
             logger.info("「ブラウザから参加」リンクなし、続行")
 
@@ -372,7 +383,7 @@ class ZoomBot:
                     if (btn) btn.click();
                 }""")
                 logger.info("✅ 参加ボタンクリック完了（JS click）")
-                time.sleep(3)
+                time.sleep(1)
         except PlaywrightTimeoutError:
             logger.error("❌ 参加ボタンが見つかりませんでした")
             self._dump_page_state(page, "参加ボタン未検出")

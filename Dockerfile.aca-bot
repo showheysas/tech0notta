@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     pulseaudio pulseaudio-utils \
     # ALSA → PulseAudio ルーティング（Azure Speech SDK が ALSA 経由で PulseAudio を使う）
     libasound2-plugins \
+    # Xvfb準備完了チェック用
+    x11-utils \
     # Chromium 依存ライブラリ
     libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
     libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
