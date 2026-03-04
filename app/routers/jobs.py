@@ -481,6 +481,11 @@ async def process_approval_background(
             logger.error(f"Traceback: {traceback.format_exc()}")
         
         # 2. タスクをNotion タスクDBに登録
+        if not request.register_tasks:
+            logger.info(f"Task registration skipped (register_tasks=False) for job {job_id}")
+        elif not job.extracted_tasks:
+            logger.warning(f"Task registration skipped (no extracted_tasks) for job {job_id}")
+
         if request.register_tasks and job.extracted_tasks:
             try:
                 tasks_list = json.loads(job.extracted_tasks)
@@ -552,7 +557,9 @@ async def process_approval_background(
                     logger.warning(f"No tasks to register for job {job_id}")
                 
             except Exception as e:
-                logger.error(f"Failed to register tasks for job {job_id}: {e}", exc_info=True)
+                logger.error(f"Failed to register tasks for job {job_id}: {type(e).__name__}: {e}", exc_info=True)
+                import traceback
+                logger.error(f"Task registration traceback: {traceback.format_exc()}")
         
         # 3. Slack通知送信
         if request.send_notifications:
@@ -579,8 +586,13 @@ async def process_approval_background(
         # ステータスを完了に更新
         job.status = JobStatus.COMPLETED.value
         job.updated_at = jst_now()
+        # 承認処理の詳細結果をerror_messageに保存（デバッグ用、エラー時のみ）
+        if tasks_registered == 0 and request.register_tasks and job.extracted_tasks:
+            job.error_message = f"WARNING: タスク登録0件（extracted_tasks有り、register_tasks=True）"
+        else:
+            job.error_message = None
         db.commit()
-        
+
         logger.info(f"Approval processing completed for job {job_id}: {tasks_registered} tasks, {notifications_sent} notifications")
         
     except Exception as e:
@@ -650,6 +662,40 @@ async def approve_job(
         status="processing",
         message="議事録を承認しました。Notion投入とタスク登録をバックグラウンドで実行中です。"
     )
+
+
+@router.get("/debug/notion-task-config")
+async def debug_notion_task_config():
+    """
+    Notion Task DB の接続設定を診断する（デバッグ用）
+    """
+    from app.config import settings
+
+    result = {
+        "notion_api_key_set": bool(settings.NOTION_API_KEY),
+        "notion_database_id_set": bool(settings.NOTION_DATABASE_ID),
+        "notion_task_db_id_set": bool(settings.NOTION_TASK_DB_ID),
+        "notion_task_db_id_value": settings.NOTION_TASK_DB_ID[:8] + "..." if settings.NOTION_TASK_DB_ID else "(empty)",
+        "notion_project_db_id_set": bool(settings.NOTION_PROJECT_DB_ID),
+    }
+
+    # NotionTaskService の状態確認
+    try:
+        from app.services.notion_task_service import get_notion_task_service
+        task_service = get_notion_task_service()
+        result["notion_task_service_enabled"] = task_service.enabled
+    except Exception as e:
+        result["notion_task_service_error"] = str(e)
+
+    # NotionService の状態確認
+    try:
+        from app.services.notion_client import get_notion_service
+        notion_service = get_notion_service()
+        result["notion_service_enabled"] = notion_service.enabled
+    except Exception as e:
+        result["notion_service_error"] = str(e)
+
+    return result
 
 
 # 注意: このエンドポイントは必ず /stats や他の固定パスエンドポイントの後に定義する
