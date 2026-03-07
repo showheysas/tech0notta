@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     ACA_BOT_IMAGE: str | None = None       # e.g. "acr002tech0nottadev.azurecr.io/tech0notta-bot:latest"
     BACKEND_URL: str = "http://localhost:8000"
 
+    # ACA App (minReplicas=1) - 常時起動Bot
+    ACA_BOT_APP_URL: str | None = None     # e.g. "https://app-bot-tech0notta.internal.japaneast.azurecontainerapps.io"
+    ACA_BOT_MODE: str = "job"              # "job" or "app"
+
     # ACR (Bot イメージレジストリ)
     ACR_SERVER: str | None = None      # e.g. myregistry.azurecr.io
     ACR_USERNAME: str | None = None
@@ -71,7 +75,7 @@ class Settings(BaseSettings):
     AZURE_AD_CLIENT_ID: str | None = None
 
     # Application
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://techn0tta-frontend-sho-v2.vercel.app"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001,http://localhost:5173,https://tech0notta-frontend-sho-v2.vercel.app"
     MAX_FILE_SIZE_MB: int = 200
 
     @property

@@ -69,6 +69,7 @@ class TeamsBot:
                     "--disable-setuid-sandbox",
                     "--use-fake-device-for-media-stream",
                     "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage",
                     "--disable-gpu",
                     "--disable-software-rasterizer",
                     "--no-first-run",

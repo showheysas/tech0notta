@@ -129,6 +129,7 @@ class GoogleMeetBot:
                     f"--use-file-for-fake-audio-capture={fake_audio}",
                     "--disable-features=WebRtcHideLocalIpsWithMdns",
                     "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage",
                     # パフォーマンス最適化フラグ（起動・参加時間短縮）
                     "--disable-gpu",
                     "--disable-software-rasterizer",

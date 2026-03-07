@@ -195,10 +195,70 @@ class BotService:
             f"platform={platform.value}"
         )
 
-        # ACA Job execution を起動（非同期）
-        asyncio.create_task(self._run_aca_job(session))
+        # モードに応じて起動方式を選択
+        from app.config import settings
+        if settings.ACA_BOT_MODE == "app" and settings.ACA_BOT_APP_URL:
+            asyncio.create_task(self._dispatch_to_aca_app(session))
+        else:
+            asyncio.create_task(self._run_aca_job(session))
 
         return session
+
+    async def _dispatch_to_aca_app(self, session: BotSession) -> None:
+        """
+        ACA App (minReplicas=1) の HTTP エンドポイントに会議参加を指示する。
+        コンテナは常時起動済みのため、コールドスタート不要で即座に会議参加。
+        """
+        try:
+            session.status = BotStatus.JOINING
+            session.updated_at = jst_now()
+
+            from app.config import settings
+            from app.google_meet_config import google_meet_config
+            from app.teams_config import teams_config
+
+            if session.platform == BotPlatform.GOOGLE_MEET:
+                bot_name = google_meet_config.bot_display_name
+            elif session.platform == BotPlatform.ZOOM:
+                bot_name = zoom_config.bot_display_name
+            else:
+                bot_name = teams_config.bot_display_name
+
+            # ライブ文字起こしサービスにセッションを作成
+            from app.services.live_transcription_service import live_transcription_service
+            live_transcription_service.create_session(
+                session_id=session.id,
+                meeting_id=session.meeting_id,
+                meeting_topic=f"会議 {session.meeting_id}"
+            )
+
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.post(
+                    f"{settings.ACA_BOT_APP_URL}/dispatch",
+                    json={
+                        "platform": session.platform.value,
+                        "meeting_url": session.meeting_url or session.meeting_id,
+                        "bot_name": bot_name,
+                        "session_id": session.id,
+                        "backend_url": settings.BACKEND_URL,
+                    },
+                )
+
+            if res.status_code == 200:
+                session.container_id = "aca-app"
+                session.updated_at = jst_now()
+                logger.info(f"ACA App dispatch 成功: session_id={session.id}")
+            elif res.status_code == 409:
+                raise ValueError("ACA App Bot は別の会議に参加中です")
+            else:
+                raise ValueError(f"ACA App dispatch 失敗: {res.status_code} {res.text}")
+
+        except Exception as e:
+            logger.error(f"ACA App dispatch エラー: {e}")
+            session.status = BotStatus.ERROR
+            session.error_message = str(e)
+            session.updated_at = jst_now()
 
     async def _run_aca_job(self, session: BotSession) -> None:
         """

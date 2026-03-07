@@ -1,9 +1,9 @@
-FROM ubuntu:22.04
+FROM ubuntu:22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# システム依存パッケージ（全てビルド時にインストール）
-RUN apt-get update && apt-get install -y \
+# システム依存パッケージ（--no-install-recommends で最小限に）
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip \
     # PulseAudio（仮想オーディオ）
     pulseaudio pulseaudio-utils \
@@ -17,29 +17,27 @@ RUN apt-get update && apt-get install -y \
     libxfixes3 libxrandr2 libgbm1 libasound2 \
     # Xvfb（仮想ディスプレイ）
     xvfb \
-    # FFmpeg（音声処理）
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # 非 root ユーザー作成（PulseAudio は root で起動しない）
 RUN useradd -m -s /bin/bash botuser
 
 WORKDIR /app
 
-# Python パッケージ
-RUN pip3 install --no-cache-dir \
+# Python パッケージ（キャッシュ削除）
+RUN pip3 install --no-cache-dir --no-compile \
     httpx tenacity azure-cognitiveservices-speech \
     playwright==1.44.0
 
 # Playwright Chromium ブラウザインストール
-# PLAYWRIGHT_BROWSERS_PATH を明示して entrypoint-aca.sh と一致させる
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/botuser/pw-browsers
 RUN mkdir -p /home/botuser/pw-browsers /home/botuser/.cache && \
     chown -R botuser:botuser /home/botuser
 USER botuser
 RUN playwright install chromium
 USER root
-RUN playwright install-deps chromium
+RUN playwright install-deps chromium && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # bot_runner スクリプト
 COPY app/bot_runner/setup-pulseaudio.sh  /app/setup-pulseaudio.sh
@@ -53,16 +51,22 @@ COPY app/browser_bot/google_meet_bot.py  /app/google_meet_bot.py
 COPY app/browser_bot/teams_bot.py        /app/teams_bot.py
 COPY app/browser_bot/zoom_bot.py         /app/zoom_bot.py
 COPY app/browser_bot/entrypoint-aca.sh   /app/entrypoint-aca.sh
+COPY app/browser_bot/bot_http_server.py  /app/bot_http_server.py
+COPY app/browser_bot/entrypoint-aca-app.sh /app/entrypoint-aca-app.sh
 
-RUN chmod +x /app/setup-pulseaudio.sh /app/audio_capture.sh /app/entrypoint-aca.sh && \
+RUN chmod +x /app/setup-pulseaudio.sh /app/audio_capture.sh /app/entrypoint-aca.sh /app/entrypoint-aca-app.sh && \
     sed -i 's/\r//' /app/*.sh
 
 # フェイクメディアファイル（ビルド時生成）
 RUN python3 -c 'w,h=640,360; uv=(w//2)*(h//2); f=open("/app/black.y4m","wb"); f.write(("YUV4MPEG2 W"+str(w)+" H"+str(h)+" F30:1 Ip A0:0 C420\n").encode()); f.write(b"FRAME\n"); f.write(bytes(w*h)); f.write(bytes([128]*uv)); f.write(bytes([128]*uv)); f.close()'
 RUN python3 -c 'import wave; f=wave.open("/app/silent.wav","wb"); f.setnchannels(1); f.setsampwidth(2); f.setframerate(16000); f.writeframes(bytes(16000*2)); f.close()'
 
+# __pycache__ と .pyc を削除してイメージ軽量化
 RUN mkdir -p /app/recordings && \
-    chown -R botuser:botuser /app
+    chown -R botuser:botuser /app && \
+    find /usr/lib/python3 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
+    find /usr/local/lib/python3* -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
+    true
 
 USER botuser
 
