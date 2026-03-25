@@ -18,6 +18,7 @@ async def upload_audio(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
+    job = None
     try:
         if file.size > settings.max_file_size_bytes:
             raise HTTPException(
@@ -70,7 +71,7 @@ async def upload_audio(
                 upload_content_type = "audio/wav"
                 logger.info(f"Audio extracted successfully: {upload_filename}")
             except Exception as e:
-                logger.error(f"Failed to extract audio: {e}")
+                logger.error(f"Failed to extract audio: {e}", exc_info=True)
                 job.status = JobStatus.FAILED.value
                 job.error_message = f"Failed to extract audio from video: {str(e)}"
                 db.commit()
@@ -106,8 +107,8 @@ async def upload_audio(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error uploading file: {e}")
-        if 'job' in locals():
+        logger.error(f"Error uploading file: {e}", exc_info=True)
+        if job is not None:
             job.status = JobStatus.FAILED.value
             job.error_message = str(e)
             db.commit()

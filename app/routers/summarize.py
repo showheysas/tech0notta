@@ -97,7 +97,7 @@ async def extract_metadata_background(job_id: str, db: Session):
         logger.info(f"Metadata and tasks extracted for job {job_id} in background")
         
     except Exception as e:
-        logger.error(f"Error extracting metadata in background for job {job_id}: {e}")
+        logger.error(f"Error extracting metadata in background for job {job_id}: {e}", exc_info=True)
         try:
             job = db.query(Job).filter(Job.job_id == job_id).first()
             if job:
@@ -106,8 +106,8 @@ async def extract_metadata_background(job_id: str, db: Session):
                 job.error_message = f"メタデータ抽出エラー: {str(e)}"
                 job.updated_at = jst_now()
                 db.commit()
-        except:
-            pass
+        except Exception as rollback_err:
+            logger.error(f"Failed to update job status after error for job {job_id}: {rollback_err}", exc_info=True)
 
 
 @router.post("/summarize")
@@ -116,6 +116,7 @@ async def summarize_transcription(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
+    job = None
     try:
         job = db.query(Job).filter(Job.job_id == request.job_id).first()
 
@@ -165,8 +166,8 @@ async def summarize_transcription(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error generating summary: {e}")
-        if 'job' in locals():
+        logger.error(f"Error generating summary: {e}", exc_info=True)
+        if job is not None:
             job.status = JobStatus.FAILED.value
             job.error_message = str(e)
             db.commit()

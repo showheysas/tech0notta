@@ -1,7 +1,11 @@
+import logging
+import warnings
+
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 connect_args = {}
 engine_kwargs = {"pool_pre_ping": True}
@@ -20,7 +24,9 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 
 def get_db():
@@ -35,10 +41,20 @@ def init_db():
     # 新規テーブルモデルをインポートして登録
     import app.models.notification_db  # noqa: F401
     Base.metadata.create_all(bind=engine)
+
+    # [DEPRECATED] 手動マイグレーションヘルパー
+    # 今後のスキーマ変更は alembic revision --autogenerate で管理すること。
+    # これらのヘルパーは 2-3 デプロイサイクル後に削除予定。
+    warnings.warn(
+        "Manual _ensure_* migration helpers are deprecated. Use Alembic migrations instead.",
+        DeprecationWarning,
+        stacklevel=1,
+    )
+    logger.warning("[DEPRECATED] Running legacy _ensure_* migration helpers. Migrate to Alembic.")
     _ensure_jobs_columns()
     _ensure_chat_tables()
-    _ensure_metadata_columns()  # MVP新機能用カラム追加
-    _ensure_users_columns()     # 認可用カラム追加
+    _ensure_metadata_columns()
+    _ensure_users_columns()
 
 
 def _ensure_jobs_columns():

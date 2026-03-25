@@ -49,7 +49,7 @@ def check_and_update_transcription_status(job: Job, db: Session) -> Job:
             logger.error(f"Job {job.job_id} transcription failed: {job.error_message}")
             
     except Exception as e:
-        logger.error(f"Error updating transcription status for job {job.job_id}: {e}")
+        logger.error(f"Error updating transcription status for job {job.job_id}: {e}", exc_info=True)
         # ここでは例外を再送せず、ログ出力にとどめて処理を継続させる
         
     return job

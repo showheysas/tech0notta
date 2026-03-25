@@ -46,7 +46,7 @@ class BlobStorageService:
                 container_client.create_container()
                 logger.info(f"Container '{self.container_name}' created")
         except Exception as e:
-            logger.error(f"Error ensuring container exists: {e}")
+            logger.error(f"Error ensuring container exists: {e}", exc_info=True)
             raise
 
     def upload_file(
@@ -77,7 +77,7 @@ class BlobStorageService:
             return blob_name, blob_url
 
         except Exception as e:
-            logger.error(f"Error uploading file to blob storage: {e}")
+            logger.error(f"Error uploading file to blob storage: {e}", exc_info=True)
             raise
 
     def download_file(self, blob_name: str) -> bytes:
@@ -90,7 +90,7 @@ class BlobStorageService:
             return download_stream.readall()
 
         except Exception as e:
-            logger.error(f"Error downloading file from blob storage: {e}")
+            logger.error(f"Error downloading file from blob storage: {e}", exc_info=True)
             raise
 
     def delete_file(self, blob_name: str) -> bool:
@@ -104,7 +104,7 @@ class BlobStorageService:
             return True
 
         except Exception as e:
-            logger.error(f"Error deleting file from blob storage: {e}")
+            logger.error(f"Error deleting file from blob storage: {e}", exc_info=True)
             return False
 
     def get_blob_url(self, blob_name: str) -> str:

@@ -83,7 +83,7 @@ async def list_projects(
             for p in projects
         ]
     except Exception as e:
-        logger.error(f"Error listing projects: {e}")
+        logger.error(f"Error listing projects: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"案件一覧の取得に失敗しました: {str(e)}")
 
 
@@ -113,5 +113,5 @@ async def create_project(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error creating project: {e}")
+        logger.error(f"Error creating project: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"案件の作成に失敗しました: {str(e)}")

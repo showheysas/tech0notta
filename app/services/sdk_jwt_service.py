@@ -67,7 +67,7 @@ class SDKJwtService:
             )
             return token
         except Exception as e:
-            logger.error(f"SDK JWT生成中にエラーが発生: {e}")
+            logger.error(f"SDK JWT生成中にエラーが発生: {e}", exc_info=True)
             return None
     
     def is_configured(self) -> bool:

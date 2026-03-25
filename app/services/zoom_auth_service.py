@@ -98,7 +98,7 @@ class ZoomAuthService:
                 return self._access_token
                 
         except httpx.RequestError as e:
-            logger.error(f"アクセストークン取得中にエラーが発生: {e}")
+            logger.error(f"アクセストークン取得中にエラーが発生: {e}", exc_info=True)
             return None
     
     def clear_token(self) -> None:

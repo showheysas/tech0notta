@@ -125,7 +125,7 @@ class ZoomNotionService:
             return response
             
         except Exception as e:
-            logger.error(f"Failed to create Notion page: {e}")
+            logger.error(f"Failed to create Notion page: {e}", exc_info=True)
             raise e
 
 zoom_notion_service = ZoomNotionService()

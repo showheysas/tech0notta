@@ -138,13 +138,13 @@ class TaskService:
             )
             
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse OpenAI response as JSON: {e}")
+            logger.error(f"Failed to parse OpenAI response as JSON: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail="タスク抽出に失敗しました。AI応答の形式が不正です。"
             )
         except Exception as e:
-            logger.error(f"Error extracting tasks: {e}")
+            logger.error(f"Error extracting tasks: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"タスク抽出に失敗しました: {str(e)}"
@@ -257,7 +257,7 @@ class TaskService:
             )
             
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse OpenAI response as JSON: {e}")
+            logger.error(f"Failed to parse OpenAI response as JSON: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail="タスク分解に失敗しました。AI応答の形式が不正です。"
@@ -266,7 +266,7 @@ class TaskService:
             # 既にHTTPExceptionの場合はそのまま再送出
             raise
         except Exception as e:
-            logger.error(f"Error decomposing task: {e}")
+            logger.error(f"Error decomposing task: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"タスク分解に失敗しました: {str(e)}"
@@ -343,7 +343,7 @@ class TaskService:
                             logger.info(f"Created subtask: {subtask_id} - {subtask.title}")
                     
                 except Exception as e:
-                    logger.error(f"Failed to register task '{task.title}': {e}")
+                    logger.error(f"Failed to register task '{task.title}': {e}", exc_info=True)
                     # 個別のタスク登録エラーは記録するが、処理は継続
                     continue
             
@@ -356,7 +356,7 @@ class TaskService:
             )
             
         except Exception as e:
-            logger.error(f"Error registering tasks: {e}")
+            logger.error(f"Error registering tasks: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"タスク登録に失敗しました: {str(e)}"
@@ -463,7 +463,7 @@ class TaskService:
             return tasks
             
         except Exception as e:
-            logger.error(f"Error getting tasks: {e}")
+            logger.error(f"Error getting tasks: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"タスク一覧の取得に失敗しました: {str(e)}"
@@ -526,7 +526,7 @@ class TaskService:
             return task_response
             
         except Exception as e:
-            logger.error(f"Error getting task {task_id}: {e}")
+            logger.error(f"Error getting task {task_id}: {e}", exc_info=True)
             if "404" in str(e) or "not found" in str(e).lower():
                 raise HTTPException(
                     status_code=404,
@@ -592,7 +592,7 @@ class TaskService:
             # 既にHTTPExceptionの場合はそのまま再送出
             raise
         except Exception as e:
-            logger.error(f"Error updating task {task_id}: {e}")
+            logger.error(f"Error updating task {task_id}: {e}", exc_info=True)
             if "404" in str(e) or "not found" in str(e).lower():
                 raise HTTPException(
                     status_code=404,
@@ -625,7 +625,7 @@ class TaskService:
             logger.info(f"Deleted task: {task_id}")
             
         except Exception as e:
-            logger.error(f"Error deleting task {task_id}: {e}")
+            logger.error(f"Error deleting task {task_id}: {e}", exc_info=True)
             if "404" in str(e) or "not found" in str(e).lower():
                 raise HTTPException(
                     status_code=404,

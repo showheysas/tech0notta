@@ -38,7 +38,7 @@ def load_prompt(filename: str = DEFAULT_SUMMARY_PROMPT) -> Optional[str]:
         logger.warning(f"Prompt file not found: {filepath}")
         return None
     except Exception as e:
-        logger.error(f"Error loading prompt from {filepath}: {e}")
+        logger.error(f"Error loading prompt from {filepath}: {e}", exc_info=True)
         return None
 
 

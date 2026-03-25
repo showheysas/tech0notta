@@ -1,43 +1,42 @@
-fastapi==0.115.0
-uvicorn[standard]==0.32.0
-gunicorn==22.0.0
-python-multipart==0.0.12
-pydantic==2.9.2
-pydantic-settings==2.6.0
+fastapi==0.115.14
+uvicorn[standard]==0.34.3
+gunicorn==23.0.0
+python-multipart==0.0.20
+pydantic==2.12.5
+pydantic-settings==2.13.1
 python-dotenv==1.0.1
 
 # Database
-sqlalchemy==2.0.36
-psycopg2-binary==2.9.10
-alembic==1.14.0
+sqlalchemy==2.0.48
+psycopg2-binary==2.9.11
+alembic==1.18.4
 
 # Azure Services
 azure-storage-blob==12.23.1
 azure-cognitiveservices-speech==1.41.1
-openai==1.55.3
+openai==1.109.1
 azure-mgmt-appcontainers>=3.0.0
 azure-identity>=1.15.0
 
 # Notion
-notion-client==2.2.1
+notion-client==2.7.0
 
 # Slack
-slack-sdk==3.27.0
+slack-sdk==3.41.0
 
 # Utils
-httpx==0.27.2
-tenacity==8.2.3
+httpx==0.28.1
+tenacity==9.1.4
 
 # Zoom Integration (追加パッケージ)
-PyJWT>=2.8.0
+PyJWT[crypto]>=2.8.0
 websockets>=13.0
 
 # Audio/Video Processing
 ffmpeg-python==0.2.0
 
 # Browser Bot (subprocess 方式でブラウザBot を起動するために必要)
-playwright==1.44.0
+playwright==1.51.0
 
 # Authentication (Azure AD JWT validation)
-python-jose[cryptography]==3.3.0
 cachetools==5.5.0

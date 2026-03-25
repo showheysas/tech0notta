@@ -158,11 +158,11 @@ async def approve_minutes(
                         logger.info(f"Registered {tasks_registered} tasks for job {job.job_id}")
                         
                     except Exception as e:
-                        logger.error(f"Task registration failed: {e}")
+                        logger.error(f"Task registration failed: {e}", exc_info=True)
                         # タスク登録失敗は警告として記録するが、承認処理は継続
                         
         except Exception as e:
-            logger.error(f"Notion save failed: {e}")
+            logger.error(f"Notion save failed: {e}", exc_info=True)
             # Notion保存失敗は警告として記録するが、承認処理は継続
         
         # 3. ステータスを更新
@@ -180,7 +180,7 @@ async def approve_minutes(
             )
             slack_posted = slack_response.get("ok", False)
         except Exception as e:
-            logger.error(f"Slack notification failed: {e}")
+            logger.error(f"Slack notification failed: {e}", exc_info=True)
             slack_posted = False
         
         return ApprovalResponse(
@@ -195,5 +195,5 @@ async def approve_minutes(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error approving minutes: {e}")
+        logger.error(f"Error approving minutes: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to approve minutes")

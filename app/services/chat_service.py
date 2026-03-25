@@ -137,7 +137,7 @@ class ChatService:
             return response_content
             
         except Exception as e:
-            logger.error(f"Error generating chat response: {e}")
+            logger.error(f"Error generating chat response: {e}", exc_info=True)
             raise ChatError(f"Failed to generate response: {str(e)}")
     
     def _generate_streaming_response(
@@ -166,7 +166,7 @@ class ChatService:
             logger.info(f"Streaming chat response completed for session: {session_id}")
             
         except Exception as e:
-            logger.error(f"Error in streaming response: {e}")
+            logger.error(f"Error in streaming response: {e}", exc_info=True)
             raise ChatError(f"Failed to generate streaming response: {str(e)}")
     
     def get_messages(self, session_id: str) -> List[ChatMessage]:

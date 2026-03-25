@@ -12,10 +12,11 @@ import logging
 from typing import Optional
 
 import httpx
+import jwt
 from cachetools import TTLCache
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jwt.exceptions import PyJWTError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -60,23 +61,17 @@ def _decode_token(token: str, jwks: dict) -> dict:
     """Azure AD JWTトークンを検証してペイロードを返す。"""
     try:
         unverified_header = jwt.get_unverified_header(token)
-    except JWTError as e:
-        raise JWTError(f"トークンヘッダー解析エラー: {e}")
+    except PyJWTError as e:
+        raise PyJWTError(f"トークンヘッダー解析エラー: {e}")
 
-    rsa_key = {}
+    rsa_key = None
     for key in jwks.get("keys", []):
         if key.get("kid") == unverified_header.get("kid"):
-            rsa_key = {
-                "kty": key["kty"],
-                "kid": key["kid"],
-                "use": key.get("use", "sig"),
-                "n": key["n"],
-                "e": key["e"],
-            }
+            rsa_key = jwt.algorithms.RSAAlgorithm.from_jwk(key)
             break
 
-    if not rsa_key:
-        raise JWTError("一致する署名鍵が見つかりません")
+    if rsa_key is None:
+        raise PyJWTError("一致する署名鍵が見つかりません")
 
     payload = jwt.decode(
         token,
@@ -173,7 +168,7 @@ async def get_current_user(
     try:
         jwks = await _get_jwks()
         payload = _decode_token(credentials.credentials, jwks)
-    except JWTError as e:
+    except PyJWTError as e:
         logger.warning(f"JWT検証失敗: {e}")
         raise credentials_exception
     except Exception as e:

@@ -74,6 +74,12 @@ SELECTORS = {
         'text="You left the meeting", '
         'text="Return to home screen"'
     ),
+    # ToS同意ボタン（「Got it」バナー）
+    "got_it": (
+        'button:has-text("Got it"), '
+        'button:has-text("OK"), '
+        'button[jsname="EszDEe"]'
+    ),
 }
 
 
@@ -184,6 +190,9 @@ class GoogleMeetBot:
                 # マイク・カメラをオフに
                 self._disable_av(page)
 
+                # ToS同意バナー「Got it」があれば先にクリック
+                self._dismiss_got_it(page)
+
                 # 参加ボタンをクリック
                 self._click_join(page)
 
@@ -224,6 +233,17 @@ class GoogleMeetBot:
                 logger.info(f"✏️ 名前入力完了: {self.bot_name}")
         except PlaywrightTimeoutError:
             logger.warning("⚠️ 名前入力フィールドなし — ページ状態を確認してください")
+
+    def _dismiss_got_it(self, page):
+        """ToS同意バナー「Got it」ボタンがあればクリック"""
+        try:
+            btn = page.wait_for_selector(SELECTORS["got_it"], timeout=3000)
+            if btn and btn.is_visible():
+                btn.click()
+                logger.info("Got it ボタンをクリック（ToS同意）")
+                time.sleep(0.5)
+        except PlaywrightTimeoutError:
+            logger.debug("Got it ボタンなし（スキップ）")
 
     def _disable_av(self, page):
         """マイク・カメラをオフにする（既にオフなら無視）"""

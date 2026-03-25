@@ -21,6 +21,7 @@ async def create_notion_page(
     request: NotionCreateRequest,
     db: Session = Depends(get_db)
 ):
+    job = None
     try:
         job = db.query(Job).filter(Job.job_id == request.job_id).first()
 
@@ -68,8 +69,8 @@ async def create_notion_page(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error creating Notion page: {e}")
-        if 'job' in locals():
+        logger.error(f"Error creating Notion page: {e}", exc_info=True)
+        if job is not None:
             job.status = JobStatus.FAILED.value
             job.error_message = str(e)
             db.commit()
@@ -105,5 +106,5 @@ async def get_job_status(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting job status: {e}")
+        logger.error(f"Error getting job status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to get job status")

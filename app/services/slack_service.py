@@ -136,9 +136,9 @@ class SlackService:
             return main_response
             
         except SlackApiError as e:
-            logger.error(f"Slack API error: {e.response['error']}")
+            logger.error(f"Slack API error: {e.response['error']}", exc_info=True)
             raise
-    
+
     async def send_task_assigned_notification(
         self,
         user_id: str,
@@ -224,9 +224,9 @@ class SlackService:
             logger.info(f"Task assigned notification sent to user: {user_id}")
             return response
         except SlackApiError as e:
-            logger.error(f"Slack API error: {e.response['error']}")
+            logger.error(f"Slack API error: {e.response['error']}", exc_info=True)
             raise
-    
+
     def post_approved_minutes(self, job: Job, approved_by: str = "", comment: str = "") -> dict:
         """
         承認された議事録をSlackに投稿（スレッド形式）
@@ -290,9 +290,9 @@ class SlackService:
             return main_response
             
         except SlackApiError as e:
-            logger.error(f"Slack API error: {e.response['error']}")
+            logger.error(f"Slack API error: {e.response['error']}", exc_info=True)
             raise
-    
+
     def _build_thread_detail_blocks(self, job: Job, approved_by: str = "", comment: str = "") -> list:
         """
         スレッド返信用の詳細情報ブロックを生成

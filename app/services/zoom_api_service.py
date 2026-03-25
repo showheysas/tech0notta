@@ -125,7 +125,7 @@ class ZoomApiService:
                 return response.json()
                 
         except httpx.RequestError as e:
-            logger.error(f"API呼び出し中にエラーが発生: {e}")
+            logger.error(f"API呼び出し中にエラーが発生: {e}", exc_info=True)
             return None
     
     async def get_meeting_details(

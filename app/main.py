@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
@@ -15,10 +17,25 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting up Meeting Notes API")
+    init_db()
+    logger.info("Database initialized")
+
+    # ACA クライアントを事前初期化（初回Bot派遣のトークン取得を高速化）
+    from app.services.bot_service import bot_service
+    bot_service.warmup()
+
+    yield
+
+
 app = FastAPI(
     title="Meeting Notes API",
     description="API for transcribing audio and creating meeting notes in Notion",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -50,17 +67,6 @@ app.include_router(deals.router)
 app.include_router(tasks.router)
 app.include_router(notifications.router)
 app.include_router(projects_router.router)
-
-
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Starting up Meeting Notes API")
-    init_db()
-    logger.info("Database initialized")
-
-    # ACA クライアントを事前初期化（初回Bot派遣のトークン取得を高速化）
-    from app.services.bot_service import bot_service
-    bot_service.warmup()
 
 
 @app.get("/")

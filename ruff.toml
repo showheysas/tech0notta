@@ -1,0 +1,16 @@
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = [
+    "F401",   # unused imports
+    "F841",   # unused variables
+    "E711",   # comparison to None
+    "E712",   # comparison to True/False
+    "UP006",  # use builtin types (list instead of List)
+    "UP007",  # use X | Y instead of Union[X, Y]
+    "UP035",  # deprecated typing imports
+]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]  # re-exports are expected in __init__.py

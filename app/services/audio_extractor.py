@@ -99,11 +99,11 @@ class AudioExtractor:
             
         except ffmpeg.Error as e:
             error_message = e.stderr.decode() if e.stderr else str(e)
-            logger.error(f"FFmpeg error: {error_message}")
+            logger.error(f"FFmpeg error: {error_message}", exc_info=True)
             raise Exception(f"Failed to extract audio: {error_message}")
             
         except Exception as e:
-            logger.error(f"Error extracting audio: {e}")
+            logger.error(f"Error extracting audio: {e}", exc_info=True)
             raise
             
         finally:

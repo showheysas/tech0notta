@@ -187,13 +187,13 @@ class MetadataService:
             return metadata
             
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse metadata response as JSON: {e}")
+            logger.error(f"Failed to parse metadata response as JSON: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail="メタデータ抽出に失敗しました。AI応答の形式が不正です。"
             )
         except Exception as e:
-            logger.error(f"Error extracting metadata: {e}")
+            logger.error(f"Error extracting metadata: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"メタデータ抽出に失敗しました: {str(e)}"

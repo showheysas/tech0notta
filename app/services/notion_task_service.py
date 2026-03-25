@@ -191,7 +191,7 @@ class NotionTaskService:
             return task_id
 
         except APIResponseError as e:
-            logger.error(f"Notion API error creating task: {e.status} - {e.message}")
+            logger.error(f"Notion API error creating task: {e.status} - {e.message}", exc_info=True)
             raise
         except Exception as e:
             logger.error(f"Error creating task in Notion: {e}", exc_info=True)
@@ -308,10 +308,10 @@ class NotionTaskService:
             return response["results"]
 
         except APIResponseError as e:
-            logger.error(f"Notion API error querying tasks: {e.status} - {e.message}")
+            logger.error(f"Notion API error querying tasks: {e.status} - {e.message}", exc_info=True)
             raise
         except Exception as e:
-            logger.error(f"Error querying tasks from Notion: {e}")
+            logger.error(f"Error querying tasks from Notion: {e}", exc_info=True)
             raise
 
     @retry(
@@ -345,10 +345,10 @@ class NotionTaskService:
             return response
 
         except APIResponseError as e:
-            logger.error(f"Notion API error retrieving task: {e.status} - {e.message}")
+            logger.error(f"Notion API error retrieving task: {e.status} - {e.message}", exc_info=True)
             raise
         except Exception as e:
-            logger.error(f"Error retrieving task from Notion: {e}")
+            logger.error(f"Error retrieving task from Notion: {e}", exc_info=True)
             raise
 
     @retry(
@@ -463,10 +463,10 @@ class NotionTaskService:
             return response
 
         except APIResponseError as e:
-            logger.error(f"Notion API error updating task: {e.status} - {e.message}")
+            logger.error(f"Notion API error updating task: {e.status} - {e.message}", exc_info=True)
             raise
         except Exception as e:
-            logger.error(f"Error updating task in Notion: {e}")
+            logger.error(f"Error updating task in Notion: {e}", exc_info=True)
             raise
 
     @retry(
@@ -501,10 +501,10 @@ class NotionTaskService:
             logger.info(f"Archived task in Notion: {task_id}")
 
         except APIResponseError as e:
-            logger.error(f"Notion API error archiving task: {e.status} - {e.message}")
+            logger.error(f"Notion API error archiving task: {e.status} - {e.message}", exc_info=True)
             raise
         except Exception as e:
-            logger.error(f"Error archiving task in Notion: {e}")
+            logger.error(f"Error archiving task in Notion: {e}", exc_info=True)
             raise
 
     def parse_task_response(self, notion_page: Dict[str, Any]) -> Dict[str, Any]:

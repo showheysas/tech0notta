@@ -152,7 +152,7 @@ class RTMSManager:
                 break
                 
             except Exception as e:
-                logger.error(f"❌ RTMS WebSocket接続エラー: {e}")
+                logger.error(f"❌ RTMS WebSocket接続エラー: {e}", exc_info=True)
                 retry_count += 1
                 if retry_count < max_retries:
                     await asyncio.sleep(2 ** retry_count)
@@ -169,7 +169,7 @@ class RTMSManager:
             try:
                 await self._handle_message(session, message)
             except Exception as e:
-                logger.error(f"メッセージ処理エラー: {e}")
+                logger.error(f"メッセージ処理エラー: {e}", exc_info=True)
     
     async def _handle_message(self, session: RTMSSession, message: str | bytes) -> None:
         """

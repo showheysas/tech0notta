@@ -32,7 +32,7 @@ class AzureSpeechService:
                     os.unlink(temp_file_path)
 
         except Exception as e:
-            logger.error(f"Error during transcription: {e}")
+            logger.error(f"Error during transcription: {e}", exc_info=True)
             raise
 
     def _run_continuous_recognition(self, audio_config) -> str:

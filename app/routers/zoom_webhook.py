@@ -186,14 +186,14 @@ async def handle_meeting_started(payload: dict[str, Any]) -> MeetingInfo:
                         f"session_id={session.id}, meeting_id={meeting_id}"
                     )
             except Exception as e:
-                logger.error(f"Bot自動派遣失敗: {e}")
+                logger.error(f"Bot自動派遣失敗: {e}", exc_info=True)
         else:
             logger.warning(
                 f"⚠️ 会議詳細の取得に失敗しました。"
                 f"Zoom OAuth設定を確認してください。"
             )
     except Exception as e:
-        logger.error(f"会議詳細の取得中にエラーが発生: {e}")
+        logger.error(f"会議詳細の取得中にエラーが発生: {e}", exc_info=True)
     
     return meeting_info
 

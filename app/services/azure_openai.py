@@ -47,7 +47,7 @@ class AzureOpenAIService:
             return summary
 
         except Exception as e:
-            logger.error(f"Error generating summary: {e}")
+            logger.error(f"Error generating summary: {e}", exc_info=True)
             raise
     
     def chat_rewrite(
@@ -72,7 +72,7 @@ class AzureOpenAIService:
                 return self._chat_rewrite_normal(messages)
         
         except Exception as e:
-            logger.error(f"Error in chat rewrite: {e}")
+            logger.error(f"Error in chat rewrite: {e}", exc_info=True)
             raise
     
     def _chat_rewrite_normal(self, messages: List[dict]) -> str:

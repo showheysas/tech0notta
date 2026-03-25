@@ -368,7 +368,7 @@ async def receive_audio(
         }
         
     except Exception as e:
-        logger.error(f"音声データ受信エラー: {e}")
+        logger.error(f"音声データ受信エラー: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -411,7 +411,7 @@ async def auto_summarize_background(job_id: str):
         await extract_metadata_background(job_id, db)
 
     except Exception as e:
-        logger.error(f"自動要約エラー: job_id={job_id}, error={e}")
+        logger.error(f"自動要約エラー: job_id={job_id}, error={e}", exc_info=True)
         try:
             job = db.query(Job).filter(Job.job_id == job_id).first()
             if job and job.status in (JobStatus.SUMMARIZING.value,):
